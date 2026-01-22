@@ -87,3 +87,67 @@ export {
   type FocusDiscordResult,
   type ServerToolError,
 } from './server.js';
+
+// Role tools
+export {
+  // Handlers
+  createRoleHandler,
+  editRoleHandler,
+  deleteRoleHandler,
+  reorderRolesHandler,
+  handleRoleToolCall,
+  // Tool definitions
+  createRoleToolDefinition,
+  editRoleToolDefinition,
+  deleteRoleToolDefinition,
+  reorderRolesToolDefinition,
+  roleToolDefinitions,
+  roleToolHandlers,
+  // Input schemas
+  CreateRoleToolInputSchema,
+  EditRoleInputSchema,
+  DeleteRoleInputSchema,
+  ReorderRolesInputSchema,
+  // Types
+  type CreateRoleToolInput,
+  type EditRoleInput,
+  type DeleteRoleInput,
+  type ReorderRolesInput,
+  type CreateRoleResult,
+  type EditRoleResult,
+  type DeleteRoleResult,
+  type ReorderRolesResult,
+  type RoleToolError,
+} from './roles.js';
+
+// Channel tools
+export {
+  // Handlers
+  createCategoryHandler,
+  createChannelHandler,
+  deleteChannelHandler,
+  editChannelHandler,
+  handleChannelToolCall,
+  // Tool definitions
+  createCategoryToolDefinition,
+  createChannelToolDefinition,
+  deleteChannelToolDefinition,
+  editChannelToolDefinition,
+  channelToolDefinitions,
+  channelToolHandlers,
+  // Input schemas
+  CreateCategoryToolInputSchema,
+  CreateChannelToolInputSchema,
+  DeleteChannelToolInputSchema,
+  EditChannelToolInputSchema,
+  // Types
+  type CreateCategoryToolInput,
+  type CreateChannelToolInput,
+  type DeleteChannelToolInput,
+  type EditChannelToolInput,
+  type CreateCategoryResult,
+  type CreateChannelResult,
+  type DeleteChannelResult,
+  type EditChannelResult,
+  type ChannelToolError,
+} from './channels.js';
