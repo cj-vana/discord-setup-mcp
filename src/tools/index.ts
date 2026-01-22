@@ -151,3 +151,26 @@ export {
   type EditChannelResult,
   type ChannelToolError,
 } from './channels.js';
+
+// Template executor tools
+export {
+  // Main executor class
+  TemplateExecutor,
+  // Handlers
+  executeTemplateHandler,
+  handleTemplateExecutorToolCall,
+  // Tool definitions
+  executeTemplateToolDefinition,
+  templateExecutorToolDefinitions,
+  templateExecutorToolHandlers,
+  // Input schemas
+  ExecuteTemplateInputSchema,
+  // Types
+  type ExecuteTemplateInput,
+  type ExecuteTemplateResult,
+  type ExecuteTemplateError,
+  type ExecutionPhase,
+  type ExecutionProgress,
+  type StepResult,
+  type ProgressCallback,
+} from './template-executor.js';
