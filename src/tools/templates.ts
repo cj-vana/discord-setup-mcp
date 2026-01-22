@@ -3,7 +3,7 @@
  *
  * Provides MCP tools for listing, previewing, and applying server templates.
  * These tools enable users to explore pre-built server configurations and
- * apply them to create new Discord servers.
+ * apply them to create new Discord servers with full automation.
  */
 
 import { z } from 'zod';
@@ -15,13 +15,29 @@ import {
   getTemplateIds,
   type TemplateSummary,
   type TemplatePreview,
+  type ServerTemplate,
+  type TemplateRole,
+  type TemplateCategory,
+  type TemplateChannel,
+  ChannelType,
+  DiscordPermission,
 } from '../templates/index.js';
 import {
   TemplateTypeSchema,
   TemplateCustomizationSchema,
   type TemplateCustomization,
+  type Permission,
 } from '../utils/validation.js';
-import { TemplateError } from '../utils/errors.js';
+import { TemplateError, wrapError } from '../utils/errors.js';
+import { createServerHandler } from './server.js';
+import { createCategoryHandler, createChannelHandler } from './channels.js';
+import { createRoleHandler } from './roles.js';
+import {
+  delay,
+  STANDARD_ACTION_DELAY,
+  LONG_ACTION_DELAY,
+  SERVER_CREATION_DELAY,
+} from '../automation/waiter.js';
 
 // ============================================
 // Tool Input Schemas
@@ -106,8 +122,13 @@ export interface ApplyTemplateResult {
   templateId: string;
   appliedRoles: string[];
   appliedCategories: string[];
-  appliedChannels: number;
+  appliedChannels: string[];
+  totalChannels: number;
   customization?: TemplateCustomization;
+  /** Detailed execution log */
+  executionLog: string[];
+  /** Any warnings or non-fatal errors during execution */
+  warnings: string[];
 }
 
 /**
@@ -188,15 +209,30 @@ export function previewTemplateHandler(
 }
 
 /**
+ * Delay constants for template application
+ */
+const TEMPLATE_ROLE_DELAY = 1500; // Delay between role creations
+const TEMPLATE_CATEGORY_DELAY = 1000; // Delay between category creations
+const TEMPLATE_CHANNEL_DELAY = 800; // Delay between channel creations
+const TEMPLATE_POST_SERVER_DELAY = 3000; // Delay after server creation before starting roles
+
+/**
  * Apply a template to create a new Discord server
  *
- * This prepares the template data for server creation. The actual
- * server creation is handled by the AppleScript automation layer.
+ * This function executes the full Discord automation sequence:
+ * 1. Creates the server using createServerHandler
+ * 2. Creates all roles from the template
+ * 3. Creates all categories from the template
+ * 4. Creates all channels within each category
+ *
+ * Each step includes proper delays for UI responsiveness.
  */
-export function applyTemplateHandler(
+export async function applyTemplateHandler(
   input: ApplyTemplateInput
-): ApplyTemplateResult | TemplateToolError {
+): Promise<ApplyTemplateResult | TemplateToolError> {
   const { templateId, serverName, customization } = input;
+  const executionLog: string[] = [];
+  const warnings: string[] = [];
 
   // Check if template exists
   if (!hasTemplate(templateId)) {
@@ -208,47 +244,314 @@ export function applyTemplateHandler(
     };
   }
 
+  // Get the raw template for full details
+  const rawTemplate = getRawTemplate(templateId) as ServerTemplate | undefined;
+  if (!rawTemplate) {
+    return {
+      success: false,
+      error: `Failed to load template '${templateId}'`,
+      code: 'TEMPLATE_LOAD_ERROR',
+    };
+  }
+
   const preview = getTemplatePreview(templateId);
   if (!preview) {
-    throw new TemplateError(
-      templateId,
-      `Failed to load template '${templateId}'`
-    );
+    return {
+      success: false,
+      error: `Failed to generate preview for template '${templateId}'`,
+      code: 'PREVIEW_GENERATION_FAILED',
+    };
   }
 
   // Apply customization filters
   const skipRoles = new Set(customization?.skipRoles ?? []);
   const skipChannels = new Set(customization?.skipChannels ?? []);
+  const roleColorOverrides = customization?.roleColorOverrides ?? {};
 
-  // Calculate what will be applied
-  const appliedRoles = preview.roles
-    .filter((r) => !skipRoles.has(r.name))
-    .map((r) => r.name);
+  // Track what was successfully applied
+  const appliedRoles: string[] = [];
+  const appliedCategories: string[] = [];
+  const appliedChannels: string[] = [];
 
-  const appliedCategories = preview.categories.map((c) => c.name);
+  try {
+    // ===========================================
+    // Step 1: Create the server
+    // ===========================================
+    executionLog.push(`Starting server creation: "${serverName}"`);
 
-  const appliedChannels = preview.categories.reduce((total, category) => {
-    const filteredChannels = category.channels.filter(
-      (ch) => !skipChannels.has(ch.name)
+    const serverResult = await createServerHandler({
+      name: serverName,
+      templateChoice: 'custom', // Use custom so we can add our own structure
+    });
+
+    if (!serverResult.success) {
+      return {
+        success: false,
+        error: `Failed to create server: ${'error' in serverResult ? serverResult.error : 'Unknown error'}`,
+        code: 'SERVER_CREATION_FAILED',
+      };
+    }
+
+    executionLog.push(`Server "${serverName}" created successfully`);
+
+    // Wait for server to be fully ready
+    await delay(TEMPLATE_POST_SERVER_DELAY);
+
+    // ===========================================
+    // Step 2: Create roles (in reverse order so hierarchy is correct)
+    // ===========================================
+    executionLog.push(`Starting role creation (${rawTemplate.roles.length} roles)`);
+
+    // Filter out roles that should be skipped
+    const rolesToCreate = rawTemplate.roles.filter((r) => !skipRoles.has(r.name));
+
+    // Create roles in reverse order (lowest hierarchy first) so higher roles can be positioned correctly
+    // Skip @everyone and other built-in roles that can't be created
+    const creatableRoles = rolesToCreate.filter(
+      (r) => r.name !== '@everyone' && r.name !== 'everyone'
     );
-    return total + filteredChannels.length;
-  }, 0);
 
-  // Add any additional roles from customization
-  if (customization?.additionalRoles) {
-    appliedRoles.push(...customization.additionalRoles.map((r) => r.name));
+    for (let i = creatableRoles.length - 1; i >= 0; i--) {
+      const role = creatableRoles[i];
+      const roleColor = roleColorOverrides[role.name] ?? role.color;
+
+      executionLog.push(`Creating role: "${role.name}"`);
+
+      try {
+        const roleResult = await createRoleHandler({
+          serverName,
+          role: {
+            name: role.name,
+            color: roleColor,
+            hoist: role.hoist,
+            mentionable: role.mentionable,
+            permissions: mapPermissions(role.permissions),
+          },
+        });
+
+        if (roleResult.success) {
+          appliedRoles.push(role.name);
+          executionLog.push(`Role "${role.name}" created successfully`);
+        } else {
+          const roleError = 'error' in roleResult ? roleResult.error : 'Unknown error';
+          warnings.push(`Failed to create role "${role.name}": ${roleError}`);
+          executionLog.push(`Warning: Failed to create role "${role.name}"`);
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        warnings.push(`Error creating role "${role.name}": ${errMsg}`);
+        executionLog.push(`Warning: Error creating role "${role.name}"`);
+      }
+
+      // Delay between roles to let Discord UI settle
+      await delay(TEMPLATE_ROLE_DELAY);
+    }
+
+    // Add any additional roles from customization
+    if (customization?.additionalRoles) {
+      for (const additionalRole of customization.additionalRoles) {
+        executionLog.push(`Creating additional role: "${additionalRole.name}"`);
+
+        try {
+          const roleResult = await createRoleHandler({
+            serverName,
+            role: additionalRole,
+          });
+
+          if (roleResult.success) {
+            appliedRoles.push(additionalRole.name);
+            executionLog.push(`Additional role "${additionalRole.name}" created successfully`);
+          } else {
+            const roleError = 'error' in roleResult ? roleResult.error : 'Unknown error';
+            warnings.push(`Failed to create additional role "${additionalRole.name}": ${roleError}`);
+          }
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          warnings.push(`Error creating additional role "${additionalRole.name}": ${errMsg}`);
+        }
+
+        await delay(TEMPLATE_ROLE_DELAY);
+      }
+    }
+
+    // ===========================================
+    // Step 3: Create categories and channels
+    // ===========================================
+    executionLog.push(`Starting category and channel creation (${rawTemplate.categories.length} categories)`);
+
+    for (const category of rawTemplate.categories) {
+      // Create the category
+      executionLog.push(`Creating category: "${category.name}"`);
+
+      try {
+        const categoryResult = await createCategoryHandler({
+          name: category.name,
+          serverName,
+          permissionOverwrites: [],
+        });
+
+        if (categoryResult.success) {
+          appliedCategories.push(category.name);
+          executionLog.push(`Category "${category.name}" created successfully`);
+        } else {
+          const categoryError = 'error' in categoryResult ? categoryResult.error : 'Unknown error';
+          warnings.push(`Failed to create category "${category.name}": ${categoryError}`);
+          executionLog.push(`Warning: Failed to create category "${category.name}"`);
+          // Continue to try creating channels even if category failed
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        warnings.push(`Error creating category "${category.name}": ${errMsg}`);
+        executionLog.push(`Warning: Error creating category "${category.name}"`);
+      }
+
+      await delay(TEMPLATE_CATEGORY_DELAY);
+
+      // Create channels within this category
+      const channelsToCreate = category.channels.filter((ch) => !skipChannels.has(ch.name));
+
+      for (const channel of channelsToCreate) {
+        executionLog.push(`Creating channel: "${channel.name}" (${channel.type})`);
+
+        try {
+          const channelResult = await createChannelHandler({
+            name: channel.name,
+            type: mapChannelType(channel.type),
+            categoryName: category.name,
+            topic: channel.topic,
+            slowmode: channel.slowmode ?? 0,
+            nsfw: channel.nsfw ?? false,
+            serverName,
+          });
+
+          if (channelResult.success) {
+            appliedChannels.push(channel.name);
+            executionLog.push(`Channel "${channel.name}" created successfully`);
+          } else {
+            warnings.push(`Failed to create channel "${channel.name}": ${channelResult.error}`);
+            executionLog.push(`Warning: Failed to create channel "${channel.name}"`);
+          }
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          warnings.push(`Error creating channel "${channel.name}": ${errMsg}`);
+          executionLog.push(`Warning: Error creating channel "${channel.name}"`);
+        }
+
+        await delay(TEMPLATE_CHANNEL_DELAY);
+      }
+    }
+
+    // ===========================================
+    // Step 4: Return success result
+    // ===========================================
+    executionLog.push('Template application completed');
+
+    return {
+      success: true,
+      message: `Template '${preview.name}' successfully applied to server '${serverName}'`,
+      serverName,
+      templateId,
+      appliedRoles,
+      appliedCategories,
+      appliedChannels,
+      totalChannels: appliedChannels.length,
+      customization,
+      executionLog,
+      warnings,
+    };
+  } catch (error) {
+    const wrappedError = wrapError(error, 'Template application failed');
+    return {
+      success: false,
+      error: wrappedError.message,
+      code: wrappedError.code,
+    };
   }
+}
 
-  return {
-    success: true,
-    message: `Template '${preview.name}' is ready to be applied to server '${serverName}'`,
-    serverName,
-    templateId,
-    appliedRoles,
-    appliedCategories,
-    appliedChannels,
-    customization,
+/**
+ * Map template ChannelType enum to the channel handler's expected type
+ */
+function mapChannelType(
+  templateType: ChannelType
+): 'text' | 'voice' | 'announcement' | 'stage' | 'forum' {
+  switch (templateType) {
+    case ChannelType.Text:
+      return 'text';
+    case ChannelType.Voice:
+      return 'voice';
+    case ChannelType.Announcement:
+      return 'announcement';
+    case ChannelType.Stage:
+      return 'stage';
+    case ChannelType.Forum:
+      return 'forum';
+    default:
+      return 'text';
+  }
+}
+
+/**
+ * Map DiscordPermission enum values to Permission type values
+ * The validation schema uses slightly different naming conventions
+ */
+function mapDiscordPermission(permission: DiscordPermission): Permission | null {
+  const mapping: Record<DiscordPermission, Permission | null> = {
+    [DiscordPermission.Administrator]: 'ADMINISTRATOR',
+    [DiscordPermission.ViewChannels]: 'VIEW_CHANNEL',
+    [DiscordPermission.ManageChannels]: 'MANAGE_CHANNELS',
+    [DiscordPermission.ManageRoles]: 'MANAGE_ROLES',
+    [DiscordPermission.ManageEmojis]: 'MANAGE_EXPRESSIONS',
+    [DiscordPermission.ViewAuditLog]: 'VIEW_AUDIT_LOG',
+    [DiscordPermission.ManageWebhooks]: 'MANAGE_WEBHOOKS',
+    [DiscordPermission.ManageServer]: 'MANAGE_SERVER',
+    [DiscordPermission.CreateInvite]: 'CREATE_INVITE',
+    [DiscordPermission.ChangeNickname]: 'CHANGE_NICKNAME',
+    [DiscordPermission.ManageNicknames]: 'MANAGE_NICKNAMES',
+    [DiscordPermission.KickMembers]: 'KICK_MEMBERS',
+    [DiscordPermission.BanMembers]: 'BAN_MEMBERS',
+    [DiscordPermission.TimeoutMembers]: 'TIMEOUT_MEMBERS',
+    [DiscordPermission.SendMessages]: 'SEND_MESSAGES',
+    [DiscordPermission.SendMessagesInThreads]: 'SEND_MESSAGES_IN_THREADS',
+    [DiscordPermission.CreatePublicThreads]: 'CREATE_PUBLIC_THREADS',
+    [DiscordPermission.CreatePrivateThreads]: 'CREATE_PRIVATE_THREADS',
+    [DiscordPermission.EmbedLinks]: 'EMBED_LINKS',
+    [DiscordPermission.AttachFiles]: 'ATTACH_FILES',
+    [DiscordPermission.AddReactions]: 'ADD_REACTIONS',
+    [DiscordPermission.UseExternalEmojis]: 'USE_EXTERNAL_EMOJI',
+    [DiscordPermission.UseExternalStickers]: 'USE_EXTERNAL_STICKERS',
+    [DiscordPermission.MentionEveryone]: 'MENTION_EVERYONE',
+    [DiscordPermission.ManageMessages]: 'MANAGE_MESSAGES',
+    [DiscordPermission.ManageThreads]: 'MANAGE_THREADS',
+    [DiscordPermission.ReadMessageHistory]: 'READ_MESSAGE_HISTORY',
+    [DiscordPermission.SendTTSMessages]: 'SEND_TTS_MESSAGES',
+    [DiscordPermission.UseApplicationCommands]: 'USE_APPLICATION_COMMANDS',
+    [DiscordPermission.Connect]: 'CONNECT',
+    [DiscordPermission.Speak]: 'SPEAK',
+    [DiscordPermission.Video]: 'VIDEO',
+    [DiscordPermission.UseActivities]: 'USE_EMBEDDED_ACTIVITIES',
+    [DiscordPermission.UseSoundboard]: 'USE_SOUNDBOARD',
+    [DiscordPermission.UseExternalSounds]: 'USE_EXTERNAL_SOUNDS',
+    [DiscordPermission.UseVoiceActivity]: 'USE_VOICE_ACTIVITY',
+    [DiscordPermission.PrioritySpeaker]: 'PRIORITY_SPEAKER',
+    [DiscordPermission.MuteMembers]: 'MUTE_MEMBERS',
+    [DiscordPermission.DeafenMembers]: 'DEAFEN_MEMBERS',
+    [DiscordPermission.MoveMembers]: 'MOVE_MEMBERS',
+    [DiscordPermission.CreateEvents]: null, // Not in validation schema
+    [DiscordPermission.ManageEvents]: null, // Not in validation schema
   };
+
+  return mapping[permission] ?? null;
+}
+
+/**
+ * Map an array of DiscordPermission to Permission array
+ * Filters out any permissions that don't have a mapping
+ */
+function mapPermissions(permissions: DiscordPermission[]): Permission[] {
+  return permissions
+    .map(mapDiscordPermission)
+    .filter((p): p is Permission => p !== null);
 }
 
 // ============================================
@@ -366,11 +669,14 @@ export const templateToolHandlers = {
 
 /**
  * Validate and handle a template tool call
+ *
+ * Note: apply_template is async and performs actual Discord automation.
+ * list_templates and preview_template are synchronous.
  */
-export function handleTemplateToolCall(
+export async function handleTemplateToolCall(
   toolName: string,
   args: unknown
-): ListTemplatesResult | PreviewTemplateResult | ApplyTemplateResult | TemplateToolError {
+): Promise<ListTemplatesResult | PreviewTemplateResult | ApplyTemplateResult | TemplateToolError> {
   switch (toolName) {
     case 'list_templates': {
       const parsed = ListTemplatesInputSchema.safeParse(args);
@@ -407,7 +713,8 @@ export function handleTemplateToolCall(
           availableTemplates: getTemplateIds(),
         };
       }
-      return applyTemplateHandler(parsed.data);
+      // apply_template is async - execute with await
+      return await applyTemplateHandler(parsed.data);
     }
 
     default:
