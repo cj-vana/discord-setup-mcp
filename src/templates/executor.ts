@@ -12,6 +12,7 @@ import {
   TemplateCategory,
   TemplateChannel,
   ChannelType,
+  DiscordPermission,
 } from './types.js';
 import { getTemplatePreview, getRawTemplate, hasTemplate } from './index.js';
 import {
@@ -40,7 +41,7 @@ import {
   TemplateError,
   wrapError,
 } from '../utils/errors.js';
-import type { TemplateCustomization } from '../utils/validation.js';
+import type { TemplateCustomization, Permission } from '../utils/validation.js';
 
 // ============================================
 // Configuration Constants
@@ -164,6 +165,10 @@ async function executeWithRetry<T>(
   maxRetries: number = MAX_RETRIES,
   retryDelay: number = RETRY_DELAY
 ): Promise<{ result: T; retryCount: number }> {
+  if (maxRetries < 1) {
+    throw new Error('maxRetries must be at least 1');
+  }
+
   let lastResult: T;
   let retryCount = 0;
 
@@ -201,6 +206,69 @@ function mapChannelType(type: ChannelType): 'text' | 'voice' | 'announcement' | 
     default:
       return 'text';
   }
+}
+
+/**
+ * Map DiscordPermission enum values to Permission type values
+ * The validation schema uses slightly different naming conventions
+ */
+function mapDiscordPermission(permission: DiscordPermission): Permission | null {
+  const mapping: Record<DiscordPermission, Permission | null> = {
+    [DiscordPermission.Administrator]: 'ADMINISTRATOR',
+    [DiscordPermission.ViewChannels]: 'VIEW_CHANNEL',
+    [DiscordPermission.ManageChannels]: 'MANAGE_CHANNELS',
+    [DiscordPermission.ManageRoles]: 'MANAGE_ROLES',
+    [DiscordPermission.ManageEmojis]: 'MANAGE_EXPRESSIONS',
+    [DiscordPermission.ViewAuditLog]: 'VIEW_AUDIT_LOG',
+    [DiscordPermission.ManageWebhooks]: 'MANAGE_WEBHOOKS',
+    [DiscordPermission.ManageServer]: 'MANAGE_SERVER',
+    [DiscordPermission.CreateInvite]: 'CREATE_INVITE',
+    [DiscordPermission.ChangeNickname]: 'CHANGE_NICKNAME',
+    [DiscordPermission.ManageNicknames]: 'MANAGE_NICKNAMES',
+    [DiscordPermission.KickMembers]: 'KICK_MEMBERS',
+    [DiscordPermission.BanMembers]: 'BAN_MEMBERS',
+    [DiscordPermission.TimeoutMembers]: 'TIMEOUT_MEMBERS',
+    [DiscordPermission.SendMessages]: 'SEND_MESSAGES',
+    [DiscordPermission.SendMessagesInThreads]: 'SEND_MESSAGES_IN_THREADS',
+    [DiscordPermission.CreatePublicThreads]: 'CREATE_PUBLIC_THREADS',
+    [DiscordPermission.CreatePrivateThreads]: 'CREATE_PRIVATE_THREADS',
+    [DiscordPermission.EmbedLinks]: 'EMBED_LINKS',
+    [DiscordPermission.AttachFiles]: 'ATTACH_FILES',
+    [DiscordPermission.AddReactions]: 'ADD_REACTIONS',
+    [DiscordPermission.UseExternalEmojis]: 'USE_EXTERNAL_EMOJI',
+    [DiscordPermission.UseExternalStickers]: 'USE_EXTERNAL_STICKERS',
+    [DiscordPermission.MentionEveryone]: 'MENTION_EVERYONE',
+    [DiscordPermission.ManageMessages]: 'MANAGE_MESSAGES',
+    [DiscordPermission.ManageThreads]: 'MANAGE_THREADS',
+    [DiscordPermission.ReadMessageHistory]: 'READ_MESSAGE_HISTORY',
+    [DiscordPermission.SendTTSMessages]: 'SEND_TTS_MESSAGES',
+    [DiscordPermission.UseApplicationCommands]: 'USE_APPLICATION_COMMANDS',
+    [DiscordPermission.Connect]: 'CONNECT',
+    [DiscordPermission.Speak]: 'SPEAK',
+    [DiscordPermission.Video]: 'VIDEO',
+    [DiscordPermission.UseActivities]: 'USE_EMBEDDED_ACTIVITIES',
+    [DiscordPermission.UseSoundboard]: 'USE_SOUNDBOARD',
+    [DiscordPermission.UseExternalSounds]: 'USE_EXTERNAL_SOUNDS',
+    [DiscordPermission.UseVoiceActivity]: 'USE_VOICE_ACTIVITY',
+    [DiscordPermission.PrioritySpeaker]: 'PRIORITY_SPEAKER',
+    [DiscordPermission.MuteMembers]: 'MUTE_MEMBERS',
+    [DiscordPermission.DeafenMembers]: 'DEAFEN_MEMBERS',
+    [DiscordPermission.MoveMembers]: 'MOVE_MEMBERS',
+    [DiscordPermission.CreateEvents]: null, // Not in validation schema
+    [DiscordPermission.ManageEvents]: null, // Not in validation schema
+  };
+
+  return mapping[permission] ?? null;
+}
+
+/**
+ * Map an array of DiscordPermission to Permission array
+ * Filters out any permissions that don't have a mapping
+ */
+function mapPermissions(permissions: DiscordPermission[]): Permission[] {
+  return permissions
+    .map(mapDiscordPermission)
+    .filter((p): p is Permission => p !== null);
 }
 
 // ============================================
@@ -429,7 +497,7 @@ export class TemplateExecutor {
           color: roleColor,
           hoist: role.hoist,
           mentionable: role.mentionable,
-          permissions: role.permissions as string[],
+          permissions: mapPermissions(role.permissions),
         },
       });
 
@@ -489,7 +557,7 @@ export class TemplateExecutor {
             color: role.color,
             hoist: role.hoist ?? false,
             mentionable: role.mentionable ?? false,
-            permissions: (role.permissions ?? []) as string[],
+            permissions: role.permissions ?? [],
           },
         });
 

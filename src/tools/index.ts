@@ -152,25 +152,12 @@ export {
   type ChannelToolError,
 } from './channels.js';
 
-// Template executor tools
+// Template executor (from templates/executor.ts)
+// Note: TemplateExecutor functionality is now consolidated in ../templates/executor.ts
+// and exposed via apply_template_full tool in templates.ts
 export {
-  // Main executor class
-  TemplateExecutor,
-  // Handlers
-  executeTemplateHandler,
-  handleTemplateExecutorToolCall,
-  // Tool definitions
-  executeTemplateToolDefinition,
-  templateExecutorToolDefinitions,
-  templateExecutorToolHandlers,
-  // Input schemas
-  ExecuteTemplateInputSchema,
-  // Types
-  type ExecuteTemplateInput,
-  type ExecuteTemplateResult,
-  type ExecuteTemplateError,
-  type ExecutionPhase,
-  type ExecutionProgress,
-  type StepResult,
-  type ProgressCallback,
-} from './template-executor.js';
+  applyTemplateFullHandler,
+  applyTemplateFullToolDefinition,
+  ApplyTemplateFullInputSchema,
+  type ApplyTemplateFullInput,
+} from './templates.js';

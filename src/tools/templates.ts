@@ -581,7 +581,7 @@ function mapChannelType(
  * Map DiscordPermission enum values to Permission type values
  * The validation schema uses slightly different naming conventions
  */
-function mapDiscordPermission(permission: DiscordPermission): Permission | null {
+export function mapDiscordPermission(permission: DiscordPermission): Permission | null {
   const mapping: Record<DiscordPermission, Permission | null> = {
     [DiscordPermission.Administrator]: 'ADMINISTRATOR',
     [DiscordPermission.ViewChannels]: 'VIEW_CHANNEL',
@@ -634,7 +634,7 @@ function mapDiscordPermission(permission: DiscordPermission): Permission | null 
  * Map an array of DiscordPermission to Permission array
  * Filters out any permissions that don't have a mapping
  */
-function mapPermissions(permissions: DiscordPermission[]): Permission[] {
+export function mapPermissions(permissions: DiscordPermission[]): Permission[] {
   return permissions
     .map(mapDiscordPermission)
     .filter((p): p is Permission => p !== null);
