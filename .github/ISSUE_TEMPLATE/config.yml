@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://modelcontextprotocol.io/docs
+    about: Learn more about the Model Context Protocol
+  - name: Discord.js Guide
+    url: https://discordjs.guide/
+    about: General Discord bot development resources
