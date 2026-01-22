@@ -428,7 +428,8 @@ export async function applyTemplateHandler(
             appliedChannels.push(channel.name);
             executionLog.push(`Channel "${channel.name}" created successfully`);
           } else {
-            warnings.push(`Failed to create channel "${channel.name}": ${channelResult.error}`);
+            const channelError = 'error' in channelResult ? channelResult.error : 'Unknown error';
+            warnings.push(`Failed to create channel "${channel.name}": ${channelError}`);
             executionLog.push(`Warning: Failed to create channel "${channel.name}"`);
           }
         } catch (error) {
