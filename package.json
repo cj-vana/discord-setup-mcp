@@ -1,0 +1,37 @@
+{
+  "name": "discord-setup-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for automating Discord server setup via AppleScript on macOS",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "discord-setup-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "discord",
+    "automation",
+    "applescript",
+    "macos"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
