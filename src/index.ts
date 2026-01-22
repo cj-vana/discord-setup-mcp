@@ -16,12 +16,15 @@ import {
   listTemplatesToolDefinition,
   previewTemplateToolDefinition,
   applyTemplateToolDefinition,
+  applyTemplateFullToolDefinition,
   listTemplatesHandler,
   previewTemplateHandler,
   applyTemplateHandler,
+  applyTemplateFullHandler,
   ListTemplatesInputSchema,
   PreviewTemplateInputSchema,
   ApplyTemplateInputSchema,
+  ApplyTemplateFullInputSchema,
 } from './tools/templates.js';
 
 import {
@@ -112,7 +115,7 @@ Available tool categories:
 - Channels: Create/edit/delete channels and categories
 - Roles: Create/edit/delete/reorder roles
 - Settings: Configure verification level, content filter, notifications
-- Templates: List, preview, and apply pre-built server templates (gaming, community, business, study group)
+- Templates: List, preview, and apply pre-built server templates (gaming, community, business, study group) with full automation support
 
 Prerequisites:
 - Discord desktop app must be installed on macOS
@@ -124,7 +127,10 @@ Prerequisites:
   // Register template tools
   registerTemplateTool(server, 'list_templates', listTemplatesToolDefinition, ListTemplatesInputSchema, listTemplatesHandler);
   registerTemplateTool(server, 'preview_template', previewTemplateToolDefinition, PreviewTemplateInputSchema, previewTemplateHandler);
-  registerTemplateTool(server, 'apply_template', applyTemplateToolDefinition, ApplyTemplateInputSchema, applyTemplateHandler);
+  // apply_template is async and performs actual automation
+  registerAsyncTool(server, 'apply_template', applyTemplateToolDefinition, ApplyTemplateInputSchema, applyTemplateHandler);
+  // apply_template_full uses the TemplateExecutor with retry logic and progress tracking
+  registerAsyncTool(server, 'apply_template_full', applyTemplateFullToolDefinition, ApplyTemplateFullInputSchema, applyTemplateFullHandler);
 
   // Register settings tools
   registerAsyncTool(server, 'open_server_settings', openServerSettingsToolDefinition, OpenServerSettingsInputSchema, openServerSettingsHandler);

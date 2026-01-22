@@ -23,6 +23,11 @@ import {
   DiscordPermission,
 } from '../templates/index.js';
 import {
+  executeTemplate,
+  type ExecutionResult,
+  type ExecutionOptions,
+} from '../templates/executor.js';
+import {
   TemplateTypeSchema,
   TemplateCustomizationSchema,
   type TemplateCustomization,
@@ -90,6 +95,41 @@ export const ApplyTemplateInputSchema = z.object({
 });
 
 export type ApplyTemplateInput = z.infer<typeof ApplyTemplateInputSchema>;
+
+/**
+ * Schema for apply_template_full tool
+ * Uses the TemplateExecutor for robust execution with retry logic and progress tracking
+ */
+export const ApplyTemplateFullInputSchema = z.object({
+  templateId: TemplateTypeSchema.describe(
+    'The ID of the template to apply (gaming, community, business, study_group)'
+  ),
+  serverName: z
+    .string()
+    .min(2, 'Server name must be at least 2 characters')
+    .max(100, 'Server name must be 100 characters or less')
+    .describe('Name for the new Discord server'),
+  customization: TemplateCustomizationSchema.optional().describe(
+    'Optional customization options for the template'
+  ),
+  skipServerCreation: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('If true, skip server creation and apply template to currently selected server'),
+  continueOnError: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('If true, continue creating remaining items even if some fail'),
+  dryRun: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('If true, simulate execution without actually creating anything (preview mode)'),
+});
+
+export type ApplyTemplateFullInput = z.infer<typeof ApplyTemplateFullInputSchema>;
 
 // ============================================
 // Tool Response Types
@@ -471,6 +511,51 @@ export async function applyTemplateHandler(
 }
 
 /**
+ * Apply a template using the robust TemplateExecutor
+ *
+ * This function uses the TemplateExecutor class which provides:
+ * - Automatic retry logic with exponential backoff
+ * - Progress tracking for each operation
+ * - Dry-run mode for previewing operations
+ * - Option to continue on errors vs fail-fast
+ * - Detailed operation-by-operation results
+ */
+export async function applyTemplateFullHandler(
+  input: ApplyTemplateFullInput
+): Promise<ExecutionResult | TemplateToolError> {
+  const { templateId, serverName, customization, skipServerCreation, continueOnError, dryRun } = input;
+
+  // Check if template exists
+  if (!hasTemplate(templateId)) {
+    return {
+      success: false,
+      error: `Template '${templateId}' not found`,
+      code: 'TEMPLATE_NOT_FOUND',
+      availableTemplates: getTemplateIds(),
+    };
+  }
+
+  try {
+    const options: ExecutionOptions = {
+      customization,
+      skipServerCreation,
+      continueOnError,
+      dryRun,
+    };
+
+    const result = await executeTemplate(templateId, serverName, options);
+    return result;
+  } catch (error) {
+    const wrappedError = wrapError(error, 'Template execution failed');
+    return {
+      success: false,
+      error: wrappedError.message,
+      code: wrappedError.code,
+    };
+  }
+}
+
+/**
  * Map template ChannelType enum to the channel handler's expected type
  */
 function mapChannelType(
@@ -651,12 +736,95 @@ export const applyTemplateToolDefinition = {
 };
 
 /**
+ * MCP tool definition for apply_template_full
+ * Uses the TemplateExecutor for robust execution with retry logic and progress tracking
+ */
+export const applyTemplateFullToolDefinition = {
+  name: 'apply_template_full',
+  description:
+    'Apply a pre-built template with full automation, retry logic, and detailed progress tracking. ' +
+    'Creates a new Discord server (or uses current server) with all roles, categories, and channels. ' +
+    'Features: automatic retry on failures with exponential backoff, dry-run preview mode, ' +
+    'operation-by-operation results, and continue-on-error option. ' +
+    'Templates available: gaming, community, business, study_group.',
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      templateId: {
+        type: 'string',
+        enum: ['gaming', 'community', 'business', 'study_group'],
+        description: 'The ID of the template to apply',
+      },
+      serverName: {
+        type: 'string',
+        description: 'Name for the new Discord server (2-100 characters)',
+        minLength: 2,
+        maxLength: 100,
+      },
+      customization: {
+        type: 'object',
+        description: 'Optional customization options',
+        properties: {
+          skipChannels: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Channel names to skip when creating',
+          },
+          skipRoles: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Role names to skip when creating',
+          },
+          roleColorOverrides: {
+            type: 'object',
+            description: 'Override colors for specific roles (role name -> hex color)',
+            additionalProperties: { type: 'string' },
+          },
+          additionalRoles: {
+            type: 'array',
+            description: 'Additional custom roles to create',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                color: { type: 'string' },
+                hoist: { type: 'boolean' },
+                mentionable: { type: 'boolean' },
+                permissions: { type: 'array', items: { type: 'string' } },
+              },
+              required: ['name'],
+            },
+          },
+        },
+      },
+      skipServerCreation: {
+        type: 'boolean',
+        description: 'If true, skip server creation and apply template to currently selected server',
+        default: false,
+      },
+      continueOnError: {
+        type: 'boolean',
+        description: 'If true, continue creating remaining items even if some fail (default: true)',
+        default: true,
+      },
+      dryRun: {
+        type: 'boolean',
+        description: 'If true, simulate execution without actually creating anything (preview mode)',
+        default: false,
+      },
+    },
+    required: ['templateId', 'serverName'],
+  },
+};
+
+/**
  * All template tool definitions for registration with MCP server
  */
 export const templateToolDefinitions = [
   listTemplatesToolDefinition,
   previewTemplateToolDefinition,
   applyTemplateToolDefinition,
+  applyTemplateFullToolDefinition,
 ];
 
 /**
@@ -666,6 +834,7 @@ export const templateToolHandlers = {
   list_templates: listTemplatesHandler,
   preview_template: previewTemplateHandler,
   apply_template: applyTemplateHandler,
+  apply_template_full: applyTemplateFullHandler,
 } as const;
 
 /**
