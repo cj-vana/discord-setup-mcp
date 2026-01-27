@@ -115,6 +115,10 @@ export interface TemplateChannel {
   nsfw?: boolean;
   /** Slowmode delay in seconds (0 = disabled) */
   slowmode?: number;
+  /** Bitrate for voice/stage channels (8000-384000) */
+  bitrate?: number;
+  /** User limit for voice channels (0 = unlimited) */
+  userLimit?: number;
   /** Permission overrides for this channel */
   permissionOverrides?: ChannelPermissionOverride[];
 }

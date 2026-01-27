@@ -1,63 +1,46 @@
-#!/usr/bin/env node
 /**
  * Discord Server Setup MCP Server Entry Point
  *
  * This is the main entry point for the MCP server that provides tools
- * for automating Discord server setup via AppleScript on macOS.
+ * for automating Discord server setup via the Discord Bot API.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { closeDiscordClient } from './client/discord.js';
 
-// Import tool definitions and handlers
+// Import guild tools
 import {
-  // Template tools
-  listTemplatesToolDefinition,
-  previewTemplateToolDefinition,
-  applyTemplateToolDefinition,
-  applyTemplateFullToolDefinition,
-  listTemplatesHandler,
-  previewTemplateHandler,
-  applyTemplateHandler,
-  applyTemplateFullHandler,
-  ListTemplatesInputSchema,
-  PreviewTemplateInputSchema,
-  ApplyTemplateInputSchema,
-  ApplyTemplateFullInputSchema,
-} from './tools/templates.js';
+  listGuildsToolDefinition,
+  selectGuildToolDefinition,
+  getGuildInfoToolDefinition,
+  listGuildsHandler,
+  selectGuildHandler,
+  getGuildInfoHandler,
+  ListGuildsInputSchema,
+  SelectGuildInputSchema,
+  GetGuildInfoInputSchema,
+} from './tools/guild.js';
 
+// Import channel tools
 import {
-  // Settings tools
-  openServerSettingsToolDefinition,
-  setVerificationLevelToolDefinition,
-  setContentFilterToolDefinition,
-  setDefaultNotificationsToolDefinition,
-  openServerSettingsHandler,
-  setVerificationLevelHandler,
-  setContentFilterHandler,
-  setDefaultNotificationsHandler,
-  OpenServerSettingsInputSchema,
-  SetVerificationLevelInputSchema,
-  SetContentFilterInputSchema,
-  SetDefaultNotificationsInputSchema,
-} from './tools/settings.js';
+  createCategoryToolDefinition,
+  createChannelToolDefinition,
+  editChannelToolDefinition,
+  deleteChannelToolDefinition,
+  createCategoryHandler,
+  createChannelHandler,
+  editChannelHandler,
+  deleteChannelHandler,
+  CreateCategoryInputSchema,
+  CreateChannelInputSchema,
+  EditChannelInputSchema,
+  DeleteChannelInputSchema,
+} from './tools/channels.js';
 
+// Import role tools
 import {
-  // Server tools
-  checkDiscordStatusToolDefinition,
-  createServerToolDefinition,
-  focusDiscordToolDefinition,
-  checkDiscordStatusHandler,
-  createServerHandler,
-  focusDiscordHandler,
-  CheckDiscordStatusInputSchema,
-  CreateServerToolInputSchema,
-  FocusDiscordInputSchema,
-} from './tools/server.js';
-
-import {
-  // Role tools
   createRoleToolDefinition,
   editRoleToolDefinition,
   deleteRoleToolDefinition,
@@ -66,31 +49,44 @@ import {
   editRoleHandler,
   deleteRoleHandler,
   reorderRolesHandler,
-  CreateRoleToolInputSchema,
+  CreateRoleInputSchema,
   EditRoleInputSchema,
   DeleteRoleInputSchema,
   ReorderRolesInputSchema,
 } from './tools/roles.js';
 
+// Import settings tools
 import {
-  // Channel tools
-  createCategoryToolDefinition,
-  createChannelToolDefinition,
-  deleteChannelToolDefinition,
-  editChannelToolDefinition,
-  createCategoryHandler,
-  createChannelHandler,
-  deleteChannelHandler,
-  editChannelHandler,
-  CreateCategoryToolInputSchema,
-  CreateChannelToolInputSchema,
-  DeleteChannelToolInputSchema,
-  EditChannelToolInputSchema,
-} from './tools/channels.js';
+  updateServerSettingsToolDefinition,
+  setVerificationLevelToolDefinition,
+  setContentFilterToolDefinition,
+  setDefaultNotificationsToolDefinition,
+  updateServerSettingsHandler,
+  setVerificationLevelHandler,
+  setContentFilterHandler,
+  setDefaultNotificationsHandler,
+  UpdateServerSettingsInputSchema,
+  SetVerificationLevelInputSchema,
+  SetContentFilterInputSchema,
+  SetDefaultNotificationsInputSchema,
+} from './tools/settings.js';
+
+// Import template tools
+import {
+  listTemplatesToolDefinition,
+  previewTemplateToolDefinition,
+  applyTemplateToolDefinition,
+  listTemplatesHandler,
+  previewTemplateHandler,
+  applyTemplateHandler,
+  ListTemplatesInputSchema,
+  PreviewTemplateInputSchema,
+  ApplyTemplateInputSchema,
+} from './tools/templates.js';
 
 // Server metadata
 const SERVER_NAME = 'discord-setup-mcp';
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = '2.0.0'; // Major version bump for discord.js rewrite
 
 /**
  * Create and configure the MCP server with all tools registered
@@ -107,153 +103,345 @@ function createServer(): McpServer {
       },
       instructions: `Discord Server Setup MCP Server
 
-This server provides tools for automating Discord server setup on macOS using AppleScript/JXA.
-It can create servers, channels, categories, roles, and configure server settings.
+This server provides tools for automating Discord server setup using the Discord Bot API.
+It can discover servers, create/manage channels, create/manage roles, configure settings, and apply templates.
 
 Available tool categories:
-- Server: Check Discord status, create servers, focus Discord window
+- Guild: List servers, select active server, get server info
 - Channels: Create/edit/delete channels and categories
 - Roles: Create/edit/delete/reorder roles
-- Settings: Configure verification level, content filter, notifications
-- Templates: List, preview, and apply pre-built server templates (gaming, community, business, study group) with full automation support
+- Settings: Configure server verification, content filter, notifications
+- Templates: Apply pre-built server templates (gaming, community, business, study-group)
 
 Prerequisites:
-- Discord desktop app must be installed on macOS
-- System Preferences > Privacy & Security > Accessibility must include the app running this MCP server
-- Discord should be logged in and visible`,
+- Discord bot created at https://discord.com/developers/applications
+- Bot token configured via DISCORD_BOT_TOKEN environment variable or ~/.discord-mcp/config.json
+- Bot invited to Discord server(s) with appropriate permissions (Manage Server, Manage Roles, Manage Channels)
+
+Setup Instructions:
+1. Create a Discord application at https://discord.com/developers/applications
+2. Add a bot user and copy the bot token
+3. Set DISCORD_BOT_TOKEN environment variable or create ~/.discord-mcp/config.json with your token
+4. Generate OAuth2 URL with bot scope and required permissions
+5. Invite bot to your Discord server(s)
+
+Workflow:
+1. Use list_guilds to see available servers
+2. Use select_guild to set the active server
+3. Use other tools to manage channels, roles, etc.`,
     }
   );
 
-  // Register template tools
-  registerTemplateTool(server, 'list_templates', listTemplatesToolDefinition, ListTemplatesInputSchema, listTemplatesHandler);
-  registerTemplateTool(server, 'preview_template', previewTemplateToolDefinition, PreviewTemplateInputSchema, previewTemplateHandler);
-  // apply_template is async and performs actual automation
-  registerAsyncTool(server, 'apply_template', applyTemplateToolDefinition, ApplyTemplateInputSchema, applyTemplateHandler);
-  // apply_template_full uses the TemplateExecutor with retry logic and progress tracking
-  registerAsyncTool(server, 'apply_template_full', applyTemplateFullToolDefinition, ApplyTemplateFullInputSchema, applyTemplateFullHandler);
-
-  // Register settings tools
-  registerAsyncTool(server, 'open_server_settings', openServerSettingsToolDefinition, OpenServerSettingsInputSchema, openServerSettingsHandler);
-  registerAsyncTool(server, 'set_verification_level', setVerificationLevelToolDefinition, SetVerificationLevelInputSchema, setVerificationLevelHandler);
-  registerAsyncTool(server, 'set_content_filter', setContentFilterToolDefinition, SetContentFilterInputSchema, setContentFilterHandler);
-  registerAsyncTool(server, 'set_default_notifications', setDefaultNotificationsToolDefinition, SetDefaultNotificationsInputSchema, setDefaultNotificationsHandler);
-
-  // Register server tools
-  registerAsyncTool(server, 'check_discord_status', checkDiscordStatusToolDefinition, CheckDiscordStatusInputSchema, checkDiscordStatusHandler);
-  registerAsyncTool(server, 'create_server', createServerToolDefinition, CreateServerToolInputSchema, createServerHandler);
-  registerAsyncTool(server, 'focus_discord', focusDiscordToolDefinition, FocusDiscordInputSchema, focusDiscordHandler);
-
-  // Register role tools
-  registerAsyncTool(server, 'create_role', createRoleToolDefinition, CreateRoleToolInputSchema, createRoleHandler);
-  registerAsyncTool(server, 'edit_role', editRoleToolDefinition, EditRoleInputSchema, editRoleHandler);
-  registerAsyncTool(server, 'delete_role', deleteRoleToolDefinition, DeleteRoleInputSchema, deleteRoleHandler);
-  registerAsyncTool(server, 'reorder_roles', reorderRolesToolDefinition, ReorderRolesInputSchema, reorderRolesHandler);
+  // Register guild tools
+  registerAsyncTool(
+    server,
+    'list_guilds',
+    listGuildsToolDefinition,
+    ListGuildsInputSchema,
+    listGuildsHandler
+  );
+  registerAsyncTool(
+    server,
+    'select_guild',
+    selectGuildToolDefinition,
+    SelectGuildInputSchema,
+    selectGuildHandler
+  );
+  registerAsyncTool(
+    server,
+    'get_guild_info',
+    getGuildInfoToolDefinition,
+    GetGuildInfoInputSchema,
+    getGuildInfoHandler
+  );
 
   // Register channel tools
-  registerAsyncTool(server, 'create_category', createCategoryToolDefinition, CreateCategoryToolInputSchema, createCategoryHandler);
-  registerAsyncTool(server, 'create_channel', createChannelToolDefinition, CreateChannelToolInputSchema, createChannelHandler);
-  registerAsyncTool(server, 'delete_channel', deleteChannelToolDefinition, DeleteChannelToolInputSchema, deleteChannelHandler);
-  registerAsyncTool(server, 'edit_channel', editChannelToolDefinition, EditChannelToolInputSchema, editChannelHandler);
+  registerAsyncTool(
+    server,
+    'create_category',
+    createCategoryToolDefinition,
+    CreateCategoryInputSchema,
+    createCategoryHandler
+  );
+  registerAsyncTool(
+    server,
+    'create_channel',
+    createChannelToolDefinition,
+    CreateChannelInputSchema,
+    createChannelHandler
+  );
+  registerAsyncTool(
+    server,
+    'edit_channel',
+    editChannelToolDefinition,
+    EditChannelInputSchema,
+    editChannelHandler
+  );
+  registerAsyncTool(
+    server,
+    'delete_channel',
+    deleteChannelToolDefinition,
+    DeleteChannelInputSchema,
+    deleteChannelHandler
+  );
+
+  // Register role tools
+  registerAsyncTool(
+    server,
+    'create_role',
+    createRoleToolDefinition,
+    CreateRoleInputSchema,
+    createRoleHandler
+  );
+  registerAsyncTool(
+    server,
+    'edit_role',
+    editRoleToolDefinition,
+    EditRoleInputSchema,
+    editRoleHandler
+  );
+  registerAsyncTool(
+    server,
+    'delete_role',
+    deleteRoleToolDefinition,
+    DeleteRoleInputSchema,
+    deleteRoleHandler
+  );
+  registerAsyncTool(
+    server,
+    'reorder_roles',
+    reorderRolesToolDefinition,
+    ReorderRolesInputSchema,
+    reorderRolesHandler
+  );
+
+  // Register settings tools
+  registerAsyncTool(
+    server,
+    'update_server_settings',
+    updateServerSettingsToolDefinition,
+    UpdateServerSettingsInputSchema,
+    updateServerSettingsHandler
+  );
+  registerAsyncTool(
+    server,
+    'set_verification_level',
+    setVerificationLevelToolDefinition,
+    SetVerificationLevelInputSchema,
+    setVerificationLevelHandler
+  );
+  registerAsyncTool(
+    server,
+    'set_content_filter',
+    setContentFilterToolDefinition,
+    SetContentFilterInputSchema,
+    setContentFilterHandler
+  );
+  registerAsyncTool(
+    server,
+    'set_default_notifications',
+    setDefaultNotificationsToolDefinition,
+    SetDefaultNotificationsInputSchema,
+    setDefaultNotificationsHandler
+  );
+
+  // Register template tools
+  registerSyncTool(
+    server,
+    'list_templates',
+    listTemplatesToolDefinition,
+    ListTemplatesInputSchema,
+    listTemplatesHandler
+  );
+  registerSyncTool(
+    server,
+    'preview_template',
+    previewTemplateToolDefinition,
+    PreviewTemplateInputSchema,
+    previewTemplateHandler
+  );
+  registerAsyncTool(
+    server,
+    'apply_template',
+    applyTemplateToolDefinition,
+    ApplyTemplateInputSchema,
+    applyTemplateHandler
+  );
 
   return server;
 }
 
 /**
- * Helper to register an async tool with the MCP server
+ * Helper function to register a synchronous tool (no async operations)
  */
-function registerAsyncTool<T extends z.ZodTypeAny>(
+function registerSyncTool<T extends z.ZodObject<any>>(
   server: McpServer,
   name: string,
-  definition: { name: string; description: string; inputSchema: object },
-  inputSchema: T,
-  handler: (input: z.infer<T>) => Promise<unknown>
-): void {
-  server.tool(
-    name,
-    definition.description,
-    zodSchemaToShape(inputSchema),
-    async (args) => {
-      const result = await handler(args as z.infer<T>);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    }
-  );
-}
-
-/**
- * Helper to register a synchronous template tool with the MCP server
- */
-function registerTemplateTool<T extends z.ZodTypeAny>(
-  server: McpServer,
-  name: string,
-  definition: { name: string; description: string; inputSchema: object },
-  inputSchema: T,
-  handler: (input: z.infer<T>) => unknown
-): void {
-  server.tool(
-    name,
-    definition.description,
-    zodSchemaToShape(inputSchema),
-    (args) => {
-      const result = handler(args as z.infer<T>);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    }
-  );
-}
-
-/**
- * Convert a Zod schema to a shape object for MCP tool registration
- * The MCP SDK expects a ZodRawShape (Record<string, ZodTypeAny>)
- */
-function zodSchemaToShape<T extends z.ZodTypeAny>(schema: T): Record<string, z.ZodTypeAny> {
-  // If it's a ZodObject, extract the shape
-  if (schema instanceof z.ZodObject) {
-    return schema.shape as Record<string, z.ZodTypeAny>;
+  definition: { name: string; description: string; inputSchema: unknown },
+  schema: T,
+  handler: (input: z.infer<T>) => {
+    success: boolean;
+    data?: unknown;
+    error?: string;
   }
-  // For other schemas, wrap in an object (shouldn't happen for our tools)
-  return {};
+): void {
+  server.tool(
+    definition.name,
+    definition.description,
+    schema.shape,
+    (params: unknown) => {
+      try {
+        // Validate input
+        const parseResult = schema.safeParse(params);
+        if (!parseResult.success) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({
+                  success: false,
+                  error: `Validation error: ${parseResult.error.message}`,
+                }),
+              },
+            ],
+          };
+        }
+
+        // Execute handler
+        const result = handler(parseResult.data);
+
+        // Return result
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(result),
+            },
+          ],
+        };
+      } catch (error) {
+        // Catch unexpected errors
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error occurred';
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                success: false,
+                error: errorMessage,
+              }),
+            },
+          ],
+        };
+      }
+    }
+  );
+}
+
+/**
+ * Helper function to register an async tool that performs Discord operations
+ */
+function registerAsyncTool<T extends z.ZodObject<any>>(
+  server: McpServer,
+  name: string,
+  definition: { name: string; description: string; inputSchema: unknown },
+  schema: T,
+  handler: (input: z.infer<T>) => Promise<{
+    success: boolean;
+    data?: unknown;
+    error?: string;
+  }>
+): void {
+  server.tool(
+    definition.name,
+    definition.description,
+    schema.shape,
+    async (params: unknown) => {
+      try {
+        // Validate input
+        const parseResult = schema.safeParse(params);
+        if (!parseResult.success) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({
+                  success: false,
+                  error: `Validation error: ${parseResult.error.message}`,
+                }),
+              },
+            ],
+          };
+        }
+
+        // Execute handler
+        const result = await handler(parseResult.data);
+
+        // Return result
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(result),
+            },
+          ],
+        };
+      } catch (error) {
+        // Catch unexpected errors
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error occurred';
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                success: false,
+                error: errorMessage,
+              }),
+            },
+          ],
+        };
+      }
+    }
+  );
 }
 
 /**
  * Main entry point
  */
-async function main(): Promise<void> {
+async function main() {
+  // Create server
   const server = createServer();
   const transport = new StdioServerTransport();
 
-  // Handle shutdown gracefully
-  process.on('SIGINT', async () => {
-    await server.close();
-    process.exit(0);
-  });
+  console.error('Discord Server Setup MCP Server starting...');
 
-  process.on('SIGTERM', async () => {
-    await server.close();
-    process.exit(0);
-  });
-
-  // Connect and start the server
+  // Connect server to transport
   await server.connect(transport);
 
-  // Log to stderr so it doesn't interfere with stdio transport
-  console.error(`${SERVER_NAME} v${SERVER_VERSION} started`);
+  console.error(
+    'Discord Server Setup MCP Server running on stdio. Bot will connect on first tool call.'
+  );
+
+  // Graceful shutdown handling
+  const shutdown = async () => {
+    console.error('Shutting down Discord MCP Server...');
+    try {
+      await closeDiscordClient();
+      console.error('Discord client closed successfully');
+    } catch (error) {
+      console.error('Error closing Discord client:', error);
+    }
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 // Run the server
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  console.error('Fatal error starting MCP server:', error);
   process.exit(1);
 });
