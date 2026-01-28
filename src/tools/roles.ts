@@ -4,10 +4,26 @@
  */
 
 import { z } from 'zod';
-import { PermissionFlagsBits, Role } from 'discord.js';
+import { PermissionFlagsBits, Role, Routes } from 'discord.js';
 import { getDiscordClient } from '../client/discord.js';
 import { resolveGuild } from '../services/guild.js';
 import { wrapDiscordError, RoleNotFoundError } from '../utils/errors.js';
+import { writeFileSync, appendFileSync } from 'fs';
+
+const LOG_FILE = '/tmp/discord-mcp-debug.log';
+function debugLog(...args: any[]) {
+  const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try { appendFileSync(LOG_FILE, line); } catch {}
+  console.error(msg);
+}
+
+// Convert SCREAMING_SNAKE_CASE to PascalCase for PermissionFlagsBits lookup
+function snakeToPascal(str: string): string {
+  return str.toLowerCase().split('_').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1)
+  ).join('');
+}
 
 // ============================================================================
 // VALIDATION SCHEMAS
@@ -129,8 +145,23 @@ export async function createRoleHandler(
   input: CreateRoleInput
 ): Promise<{ success: boolean; data?: unknown; error?: string }> {
   try {
-    const client = await getDiscordClient();
-    const guild = await resolveGuild(client, input.guildId);
+    console.error('[create_role] Starting handler...');
+
+    // DEBUG: Add timeout to getDiscordClient
+    const clientPromise = getDiscordClient();
+    const clientTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('getDiscordClient timed out')), 5000)
+    );
+    const client = await Promise.race([clientPromise, clientTimeout]);
+    console.error('[create_role] Got client');
+
+    // DEBUG: Add timeout to resolveGuild
+    const guildPromise = resolveGuild(client, input.guildId);
+    const guildTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('resolveGuild timed out')), 5000)
+    );
+    const guild = await Promise.race([guildPromise, guildTimeout]);
+    console.error('[create_role] Resolved guild:', guild.name);
 
     // Convert color to integer if hex string
     let colorInt: number | undefined;
@@ -141,41 +172,82 @@ export async function createRoleHandler(
         colorInt = input.color;
       }
     }
+    console.error('[create_role] Color:', colorInt);
 
     // Convert permission names to bitfield
     let permissionsBitfield: bigint | undefined;
     if (input.permissions) {
       permissionsBitfield = BigInt(0);
       for (const perm of input.permissions) {
-        if (perm in PermissionFlagsBits) {
+        // Convert SCREAMING_SNAKE_CASE to PascalCase for PermissionFlagsBits
+        const pascalPerm = snakeToPascal(perm);
+        if (pascalPerm in PermissionFlagsBits) {
           permissionsBitfield |=
-            PermissionFlagsBits[perm as keyof typeof PermissionFlagsBits];
+            PermissionFlagsBits[pascalPerm as keyof typeof PermissionFlagsBits];
         }
       }
     }
+    console.error('[create_role] Permissions:', permissionsBitfield?.toString());
 
-    const role = await guild.roles.create({
-      name: input.name,
-      color: colorInt,
-      hoist: input.hoist,
-      mentionable: input.mentionable,
-      permissions: permissionsBitfield,
-      position: input.position,
+    console.error('[create_role] About to call REST API directly...');
+
+    // Build REST API payload
+    const restPayload: any = { name: input.name };
+    if (colorInt !== undefined) restPayload.color = colorInt;
+    if (input.hoist !== undefined) restPayload.hoist = input.hoist;
+    if (input.mentionable !== undefined) restPayload.mentionable = input.mentionable;
+    if (permissionsBitfield !== undefined) restPayload.permissions = permissionsBitfield.toString();
+
+    console.error('[create_role] REST payload:', JSON.stringify(restPayload));
+
+    // Use raw fetch to check rate limit headers
+    const config = await import('../client/config.js');
+    const token = config.getConfig().discordToken;
+
+    const response = await fetch(`https://discord.com/api/v10/guilds/${guild.id}/roles`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bot ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(restPayload),
     });
+
+    console.error('[create_role] Response status:', response.status);
+    console.error('[create_role] Rate limit headers:', {
+      limit: response.headers.get('x-ratelimit-limit'),
+      remaining: response.headers.get('x-ratelimit-remaining'),
+      reset: response.headers.get('x-ratelimit-reset'),
+      resetAfter: response.headers.get('x-ratelimit-reset-after'),
+      bucket: response.headers.get('x-ratelimit-bucket'),
+      global: response.headers.get('x-ratelimit-global'),
+      retryAfter: response.headers.get('retry-after'),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[create_role] Error body:', errorBody);
+      throw new Error(`Discord API error ${response.status}: ${errorBody}`);
+    }
+
+    const roleData = await response.json() as any;
+
+    console.error('[create_role] Role created via REST:', roleData.id);
 
     return {
       success: true,
       data: {
-        id: role.id,
-        name: role.name,
-        color: role.color,
-        position: role.position,
-        hoist: role.hoist,
-        mentionable: role.mentionable,
-        message: `Role "${role.name}" created successfully`,
+        id: roleData.id,
+        name: roleData.name,
+        color: roleData.color,
+        position: roleData.position,
+        hoist: roleData.hoist,
+        mentionable: roleData.mentionable,
+        message: `Role "${roleData.name}" created successfully`,
       },
     };
   } catch (error) {
+    console.error('[create_role] Error:', error);
     const mcpError = wrapDiscordError(error, 'create_role');
     return {
       success: false,
@@ -251,53 +323,110 @@ export async function editRoleHandler(
   input: EditRoleInput
 ): Promise<{ success: boolean; data?: unknown; error?: string }> {
   try {
+    debugLog('[edit_role] Input received:', JSON.stringify(input));
+
     const client = await getDiscordClient();
     const guild = await resolveGuild(client, input.guildId);
 
+    // Verify role exists
     const role = guild.roles.cache.get(input.roleId);
     if (!role) {
       throw new RoleNotFoundError(input.roleId);
     }
 
-    // Build edit options
-    const editOptions: any = {};
-    if (input.name !== undefined) editOptions.name = input.name;
-    if (input.hoist !== undefined) editOptions.hoist = input.hoist;
-    if (input.mentionable !== undefined)
-      editOptions.mentionable = input.mentionable;
-    if (input.position !== undefined) editOptions.position = input.position;
+    // Build REST API payload
+    const restPayload: any = {};
+    if (input.name !== undefined) restPayload.name = input.name;
+    if (input.hoist !== undefined) restPayload.hoist = input.hoist;
+    if (input.mentionable !== undefined) restPayload.mentionable = input.mentionable;
 
     // Convert color
     if (input.color !== undefined) {
       if (typeof input.color === 'string') {
-        editOptions.color = parseInt(input.color.replace('#', ''), 16);
+        restPayload.color = parseInt(input.color.replace('#', ''), 16);
       } else {
-        editOptions.color = input.color;
+        restPayload.color = input.color;
       }
     }
 
-    // Convert permissions
+    // Convert permissions to bitfield string (Discord API requires string format)
     if (input.permissions !== undefined) {
+      debugLog('[edit_role] Processing permissions array:', JSON.stringify(input.permissions));
       let permissionsBitfield = BigInt(0);
       for (const perm of input.permissions) {
-        if (perm in PermissionFlagsBits) {
-          permissionsBitfield |=
-            PermissionFlagsBits[perm as keyof typeof PermissionFlagsBits];
+        // Convert SCREAMING_SNAKE_CASE to PascalCase for PermissionFlagsBits
+        const pascalPerm = snakeToPascal(perm);
+        const exists = pascalPerm in PermissionFlagsBits;
+        debugLog(`[edit_role] Perm "${perm}" -> "${pascalPerm}" exists: ${exists}`);
+        if (exists) {
+          const flagValue = PermissionFlagsBits[pascalPerm as keyof typeof PermissionFlagsBits];
+          debugLog(`[edit_role] Flag value for ${pascalPerm}: ${flagValue.toString()}`);
+          permissionsBitfield |= flagValue;
         }
       }
-      editOptions.permissions = permissionsBitfield;
+      debugLog('[edit_role] Final permissions bitfield:', permissionsBitfield.toString());
+      restPayload.permissions = permissionsBitfield.toString();
+    } else {
+      debugLog('[edit_role] No permissions in input');
     }
 
-    const updatedRole = await role.edit(editOptions);
+    // Use direct REST API call (more reliable than discord.js role.edit())
+    const config = await import('../client/config.js');
+    const token = config.getConfig().discordToken;
+
+    debugLog('[edit_role] REST payload:', JSON.stringify(restPayload));
+
+    const response = await fetch(
+      `https://discord.com/api/v10/guilds/${guild.id}/roles/${input.roleId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bot ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(restPayload),
+      }
+    );
+
+    debugLog('[edit_role] Response status:', response.status);
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      debugLog('[edit_role] Error body:', errorBody);
+      throw new Error(`Discord API error ${response.status}: ${errorBody}`);
+    }
+
+    const roleData = await response.json() as any;
+    debugLog('[edit_role] Response data:', JSON.stringify(roleData));
+
+    // Handle position separately if provided (requires different API endpoint)
+    if (input.position !== undefined) {
+      const positionResponse = await fetch(
+        `https://discord.com/api/v10/guilds/${guild.id}/roles`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bot ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify([{ id: input.roleId, position: input.position }]),
+        }
+      );
+
+      if (!positionResponse.ok) {
+        debugLog('[edit_role] Position update failed, but role was updated');
+      }
+    }
 
     return {
       success: true,
       data: {
-        id: updatedRole.id,
-        name: updatedRole.name,
-        color: updatedRole.color,
-        position: updatedRole.position,
-        message: `Role "${updatedRole.name}" updated successfully`,
+        id: roleData.id,
+        name: roleData.name,
+        color: roleData.color,
+        position: roleData.position,
+        permissions: roleData.permissions,
+        message: `Role "${roleData.name}" updated successfully`,
       },
     };
   } catch (error) {
