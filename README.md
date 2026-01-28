@@ -66,26 +66,67 @@ npm run build
 
 ### Set Bot Token
 
-#### Option A: Environment Variable (Recommended)
+#### Option A: Environment Variable
 
+**macOS/Linux (temporary - current session only):**
 ```bash
 export DISCORD_BOT_TOKEN="your-bot-token-here"
 ```
+
+**macOS/Linux (permanent - add to shell profile):**
+```bash
+# For zsh (default on macOS)
+echo 'export DISCORD_BOT_TOKEN="your-bot-token-here"' >> ~/.zshrc
+source ~/.zshrc
+
+# For bash
+echo 'export DISCORD_BOT_TOKEN="your-bot-token-here"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Windows Command Prompt (temporary):**
+```cmd
+set DISCORD_BOT_TOKEN=your-bot-token-here
+```
+
+**Windows PowerShell (temporary):**
+```powershell
+$env:DISCORD_BOT_TOKEN = "your-bot-token-here"
+```
+
+**Windows (permanent - System Environment Variables):**
+1. Press `Win + R`, type `sysdm.cpl`, press Enter
+2. Go to **Advanced** tab → **Environment Variables**
+3. Under "User variables", click **New**
+4. Variable name: `DISCORD_BOT_TOKEN`
+5. Variable value: `your-bot-token-here`
+6. Click OK and restart your terminal
 
 #### Option B: Configuration File
 
 Create `~/.discord-mcp/config.json`:
 
-```json
+```bash
+# Create the directory
+mkdir -p ~/.discord-mcp
+
+# Create the config file (replace with your actual token)
+cat > ~/.discord-mcp/config.json << 'EOF'
 {
   "discordToken": "your-bot-token-here",
   "defaultGuildId": "optional-default-server-id"
 }
+EOF
+
+# Secure the file (recommended)
+chmod 600 ~/.discord-mcp/config.json
 ```
 
-### Claude Desktop Configuration
+On Windows, create `%USERPROFILE%\.discord-mcp\config.json` with the same JSON content.
 
-Add to your Claude Desktop config:
+### Claude Desktop Configuration (Recommended)
+
+The easiest method is to set the token directly in your Claude Desktop config:
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -104,10 +145,16 @@ Add to your Claude Desktop config:
 }
 ```
 
+Replace `/path/to/discord-setup-mcp` with the actual path where you cloned the repository.
+
 ### Claude Code Configuration
 
 ```bash
+# Add the MCP server
 claude mcp add discord-setup-mcp node /path/to/discord-setup-mcp/dist/index.js
+
+# Set the token (if not using config file or system env var)
+claude mcp add discord-setup-mcp node /path/to/discord-setup-mcp/dist/index.js -e DISCORD_BOT_TOKEN=your-bot-token-here
 ```
 
 Set the token in your environment or use the config file method.
