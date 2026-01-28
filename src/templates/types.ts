@@ -147,6 +147,8 @@ export interface ServerTemplate {
   description: string;
   /** Target audience or use case */
   useCase: string;
+  /** Icon for the template (emoji) */
+  icon?: string;
   /** Roles to create (in order of hierarchy, highest first) */
   roles: TemplateRole[];
   /** Categories and channels to create */
