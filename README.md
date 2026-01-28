@@ -48,7 +48,13 @@ An MCP (Model Context Protocol) server for automating Discord server setup using
 
 ## Installation
 
-### From Source
+### Quick Install (One-Liner)
+
+```bash
+git clone https://github.com/cj-vana/discord-setup-mcp.git && cd discord-setup-mcp && npm install && npm run build
+```
+
+### Step by Step
 
 ```bash
 # Clone the repository
