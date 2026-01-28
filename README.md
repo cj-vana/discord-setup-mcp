@@ -34,15 +34,17 @@ An MCP (Model Context Protocol) server for automating Discord server setup using
 
 1. Create an application at https://discord.com/developers/applications
 2. Add a bot user and copy the bot token
-3. Enable **SERVER MEMBERS INTENT** in bot settings (Bot → Privileged Gateway Intents)
-4. Generate an OAuth2 invite URL with required permissions:
-   - Manage Server
-   - Manage Roles
-   - Manage Channels
-   - View Channels
-5. Invite the bot to your Discord server(s)
+3. Enable **ALL Privileged Gateway Intents** in bot settings (Bot → Privileged Gateway Intents):
+   - Presence Intent
+   - Server Members Intent
+   - Message Content Intent
+4. Generate an OAuth2 invite URL:
+   - Go to OAuth2 → URL Generator
+   - Select scopes: `bot` and `applications.commands`
+   - Select **Administrator** permission (required for full server management)
+5. Invite the bot to your Discord server(s) using the generated URL
 
-See [docs/BOT_SETUP.md](docs/BOT_SETUP.md) for detailed instructions.
+**Important**: The bot requires Administrator permission to manage all server settings, roles, channels, and permissions without restrictions.
 
 ## Installation
 
@@ -426,18 +428,18 @@ Reorder roles so Admin is highest, then Moderator, then Member, then @everyone
 
 ### Bot Not Connecting
 - Verify bot token is correct
-- Check that SERVER MEMBERS INTENT is enabled in Discord Developer Portal
+- Check that **ALL Privileged Gateway Intents** are enabled in Discord Developer Portal
 - Ensure the bot user is created (not just the application)
 
 ### Can't Manage Roles/Channels
-- Bot's role must be higher than roles it manages
-- Check bot has required permissions in server settings
-- Verify the bot was invited with correct OAuth2 scopes
+- Ensure bot has **Administrator** permission
+- Bot's role must be higher than roles it manages (drag bot role up in server settings)
+- Verify the bot was invited with correct OAuth2 scopes (`bot` and `applications.commands`)
 
 ### Permission Errors
-- Bot can only manage roles below its highest role
-- Some permissions require the bot to have them first
-- Channel overwrites may conflict with category permissions
+- Grant the bot **Administrator** permission for unrestricted access
+- Bot can only manage roles below its highest role in the hierarchy
+- Drag the bot's role higher in Server Settings → Roles
 
 ### Guild Not Found
 - Confirm bot is in the server
@@ -452,7 +454,7 @@ Debug logs are written to `/tmp/discord-mcp-debug.log` for troubleshooting permi
 - **Never share your bot token** - treat it like a password
 - **Use environment variables** - don't commit tokens to version control
 - **Regenerate tokens if compromised** - reset in Discord Developer Portal
-- **Limit bot permissions** - only grant what's actually needed
+- **Limit server access** - only add the bot to servers you trust
 - **Restrict file permissions** - `chmod 600 ~/.discord-mcp/config.json`
 
 ## Architecture
