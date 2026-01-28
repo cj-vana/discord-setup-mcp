@@ -3,8 +3,8 @@
  * Orchestrates the application of Discord server templates using discord.js API
  */
 
-import { Guild, ChannelType, PermissionFlagsBits } from 'discord.js';
-import type { ServerTemplate, TemplateRole, TemplateCategory, TemplateChannel } from '../templates/types.js';
+import { Guild, ChannelType, PermissionFlagsBits, OverwriteType } from 'discord.js';
+import type { ServerTemplate, TemplateRole, TemplateCategory, TemplateChannel, ChannelPermissionOverride } from '../templates/types.js';
 
 /**
  * Delay helper for rate limiting
@@ -14,16 +14,35 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * Convert SCREAMING_SNAKE_CASE to PascalCase for PermissionFlagsBits lookup
+ * e.g., VIEW_CHANNEL -> ViewChannel
+ */
+function snakeToPascal(str: string): string {
+  return str
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+}
+
+/**
  * Convert template permission strings to discord.js permission bitfield
+ * Handles both SCREAMING_SNAKE_CASE (from templates) and PascalCase formats
  */
 function convertPermissions(permissions: string[]): bigint {
   let bitfield = BigInt(0);
 
   for (const perm of permissions) {
-    // Map template permission names to PermissionFlagsBits
-    const permKey = perm as keyof typeof PermissionFlagsBits;
-    if (permKey in PermissionFlagsBits) {
-      bitfield |= PermissionFlagsBits[permKey];
+    // First try direct lookup (PascalCase)
+    if (perm in PermissionFlagsBits) {
+      bitfield |= PermissionFlagsBits[perm as keyof typeof PermissionFlagsBits];
+      continue;
+    }
+
+    // Convert SCREAMING_SNAKE_CASE to PascalCase
+    const pascalPerm = snakeToPascal(perm);
+    if (pascalPerm in PermissionFlagsBits) {
+      bitfield |= PermissionFlagsBits[pascalPerm as keyof typeof PermissionFlagsBits];
     }
   }
 
@@ -50,6 +69,53 @@ function mapChannelType(type: string): ChannelType {
   };
 
   return typeMap[type] || ChannelType.GuildText;
+}
+
+/**
+ * Build permission overwrites array for discord.js
+ */
+function buildPermissionOverwrites(
+  overrides: ChannelPermissionOverride[] | undefined,
+  roleNameToId: Map<string, string>
+): Array<{
+  id: string;
+  type: OverwriteType;
+  allow: bigint;
+  deny: bigint;
+}> {
+  if (!overrides || overrides.length === 0) {
+    return [];
+  }
+
+  const result: Array<{
+    id: string;
+    type: OverwriteType;
+    allow: bigint;
+    deny: bigint;
+  }> = [];
+
+  for (const override of overrides) {
+    // Look up role ID by name (case-insensitive)
+    const roleId = roleNameToId.get(override.role.toLowerCase()) ||
+                   roleNameToId.get(override.role);
+
+    if (!roleId) {
+      console.error(`    ⚠ Role not found for permission override: ${override.role}`);
+      continue;
+    }
+
+    const allowBits = convertPermissions(override.allow);
+    const denyBits = convertPermissions(override.deny);
+
+    result.push({
+      id: roleId,
+      type: OverwriteType.Role,
+      allow: allowBits,
+      deny: denyBits,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -109,16 +175,32 @@ export async function applyTemplate(
     }
   }
 
+  // Build role name to ID map for permission overwrites
+  const roleNameToId = new Map<string, string>();
+  guild.roles.cache.forEach((role) => {
+    roleNameToId.set(role.name.toLowerCase(), role.id);
+    if (role.name === '@everyone') {
+      roleNameToId.set('@everyone', role.id);
+    }
+  });
+
   // Step 2: Create categories and channels
   if (!options?.skipCategories && template.categories) {
     console.error(`Creating ${template.categories.length} categories...`);
 
     for (const categoryConfig of template.categories) {
       try {
+        // Build permission overwrites for category
+        const categoryOverwrites = buildPermissionOverwrites(
+          categoryConfig.permissionOverrides,
+          roleNameToId
+        );
+
         // Create category
         const category = await guild.channels.create({
           name: categoryConfig.name,
           type: ChannelType.GuildCategory,
+          permissionOverwrites: categoryOverwrites,
         });
         categoriesCreated++;
         console.error(`  ✓ Created category: ${categoryConfig.name}`);
@@ -131,10 +213,17 @@ export async function applyTemplate(
 
           const channelPromises = categoryConfig.channels.map(async (channelConfig) => {
             try {
+              // Build permission overwrites for channel
+              const channelOverwrites = buildPermissionOverwrites(
+                channelConfig.permissionOverrides,
+                roleNameToId
+              );
+
               const channelOptions: any = {
                 name: channelConfig.name,
                 type: mapChannelType(channelConfig.type),
                 parent: category.id,
+                permissionOverwrites: channelOverwrites.length > 0 ? channelOverwrites : undefined,
               };
 
               // Add type-specific options

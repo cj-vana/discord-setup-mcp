@@ -1,558 +1,613 @@
 /**
- * Business workspace server template for Discord
- * Provides a professional structure for team collaboration, projects, and communication
+ * Business Workspace Server Template
+ *
+ * A professional server structure designed for team collaboration, project
+ * management, and business communication. Features departments, projects,
+ * and hierarchical permissions.
  */
 
-/**
- * Discord permission flags for role configuration
- */
-export const DiscordPermissions = {
-  VIEW_CHANNEL: 1n << 10n,
-  SEND_MESSAGES: 1n << 11n,
-  EMBED_LINKS: 1n << 14n,
-  ATTACH_FILES: 1n << 15n,
-  READ_MESSAGE_HISTORY: 1n << 16n,
-  MENTION_EVERYONE: 1n << 17n,
-  USE_EXTERNAL_EMOJIS: 1n << 18n,
-  ADD_REACTIONS: 1n << 6n,
-  CONNECT: 1n << 20n,
-  SPEAK: 1n << 21n,
-  STREAM: 1n << 9n,
-  USE_VAD: 1n << 25n,
-  MUTE_MEMBERS: 1n << 22n,
-  DEAFEN_MEMBERS: 1n << 23n,
-  MOVE_MEMBERS: 1n << 24n,
-  MANAGE_CHANNELS: 1n << 4n,
-  MANAGE_ROLES: 1n << 28n,
-  MANAGE_MESSAGES: 1n << 13n,
-  KICK_MEMBERS: 1n << 1n,
-  BAN_MEMBERS: 1n << 2n,
-  ADMINISTRATOR: 1n << 3n,
-} as const;
+import {
+  ServerTemplate,
+  TemplateRole,
+  TemplateCategory,
+  ChannelType,
+  DiscordPermission,
+} from './types.js';
 
 /**
- * Channel types supported by Discord
+ * Roles for a business workspace server
+ * Ordered by hierarchy (highest first)
  */
-export type ChannelType = 'text' | 'voice' | 'announcement' | 'stage' | 'forum';
+const businessRoles: TemplateRole[] = [
+  {
+    name: 'Owner',
+    color: '#E74C3C',
+    hoist: true,
+    mentionable: false,
+    position: 100,
+    permissions: [DiscordPermission.Administrator],
+  },
+  {
+    name: 'Executive',
+    color: '#9B59B6',
+    hoist: true,
+    mentionable: true,
+    position: 90,
+    permissions: [
+      DiscordPermission.ViewChannels,
+      DiscordPermission.ManageChannels,
+      DiscordPermission.ManageMessages,
+      DiscordPermission.ManageThreads,
+      DiscordPermission.KickMembers,
+      DiscordPermission.MentionEveryone,
+      DiscordPermission.MuteMembers,
+      DiscordPermission.DeafenMembers,
+      DiscordPermission.MoveMembers,
+      DiscordPermission.SendMessages,
+      DiscordPermission.EmbedLinks,
+      DiscordPermission.AttachFiles,
+      DiscordPermission.ReadMessageHistory,
+      DiscordPermission.UseExternalEmojis,
+      DiscordPermission.AddReactions,
+      DiscordPermission.Connect,
+      DiscordPermission.Speak,
+      DiscordPermission.Video,
+      DiscordPermission.UseVoiceActivity,
+      DiscordPermission.PrioritySpeaker,
+      DiscordPermission.CreatePublicThreads,
+      DiscordPermission.CreatePrivateThreads,
+      DiscordPermission.SendMessagesInThreads,
+      DiscordPermission.UseApplicationCommands,
+      DiscordPermission.ViewAuditLog,
+    ],
+  },
+  {
+    name: 'Manager',
+    color: '#3498DB',
+    hoist: true,
+    mentionable: true,
+    position: 80,
+    permissions: [
+      DiscordPermission.ViewChannels,
+      DiscordPermission.ManageMessages,
+      DiscordPermission.ManageThreads,
+      DiscordPermission.MentionEveryone,
+      DiscordPermission.MuteMembers,
+      DiscordPermission.MoveMembers,
+      DiscordPermission.SendMessages,
+      DiscordPermission.EmbedLinks,
+      DiscordPermission.AttachFiles,
+      DiscordPermission.ReadMessageHistory,
+      DiscordPermission.UseExternalEmojis,
+      DiscordPermission.AddReactions,
+      DiscordPermission.Connect,
+      DiscordPermission.Speak,
+      DiscordPermission.Video,
+      DiscordPermission.UseVoiceActivity,
+      DiscordPermission.CreatePublicThreads,
+      DiscordPermission.CreatePrivateThreads,
+      DiscordPermission.SendMessagesInThreads,
+      DiscordPermission.UseApplicationCommands,
+    ],
+  },
+  {
+    name: 'Team Lead',
+    color: '#2ECC71',
+    hoist: true,
+    mentionable: true,
+    position: 70,
+    permissions: [
+      DiscordPermission.ViewChannels,
+      DiscordPermission.ManageMessages,
+      DiscordPermission.SendMessages,
+      DiscordPermission.EmbedLinks,
+      DiscordPermission.AttachFiles,
+      DiscordPermission.ReadMessageHistory,
+      DiscordPermission.UseExternalEmojis,
+      DiscordPermission.AddReactions,
+      DiscordPermission.Connect,
+      DiscordPermission.Speak,
+      DiscordPermission.Video,
+      DiscordPermission.UseVoiceActivity,
+      DiscordPermission.CreatePublicThreads,
+      DiscordPermission.SendMessagesInThreads,
+      DiscordPermission.UseApplicationCommands,
+    ],
+  },
+  {
+    name: 'Employee',
+    color: '#1ABC9C',
+    hoist: false,
+    mentionable: false,
+    position: 50,
+    permissions: [
+      DiscordPermission.ViewChannels,
+      DiscordPermission.SendMessages,
+      DiscordPermission.EmbedLinks,
+      DiscordPermission.AttachFiles,
+      DiscordPermission.ReadMessageHistory,
+      DiscordPermission.UseExternalEmojis,
+      DiscordPermission.AddReactions,
+      DiscordPermission.Connect,
+      DiscordPermission.Speak,
+      DiscordPermission.Video,
+      DiscordPermission.UseVoiceActivity,
+      DiscordPermission.CreatePublicThreads,
+      DiscordPermission.SendMessagesInThreads,
+      DiscordPermission.UseApplicationCommands,
+      DiscordPermission.ChangeNickname,
+    ],
+  },
+  {
+    name: 'Contractor',
+    color: '#F39C12',
+    hoist: false,
+    mentionable: false,
+    position: 30,
+    permissions: [
+      DiscordPermission.ViewChannels,
+      DiscordPermission.SendMessages,
+      DiscordPermission.EmbedLinks,
+      DiscordPermission.AttachFiles,
+      DiscordPermission.ReadMessageHistory,
+      DiscordPermission.AddReactions,
+      DiscordPermission.Connect,
+      DiscordPermission.Speak,
+      DiscordPermission.UseVoiceActivity,
+      DiscordPermission.SendMessagesInThreads,
+      DiscordPermission.UseApplicationCommands,
+    ],
+  },
+  {
+    name: 'Guest',
+    color: '#95A5A6',
+    hoist: false,
+    mentionable: false,
+    position: 10,
+    permissions: [
+      DiscordPermission.ViewChannels,
+      DiscordPermission.SendMessages,
+      DiscordPermission.ReadMessageHistory,
+      DiscordPermission.AddReactions,
+      DiscordPermission.Connect,
+      DiscordPermission.Speak,
+      DiscordPermission.UseApplicationCommands,
+    ],
+  },
+];
 
 /**
- * Role definition for a Discord server
+ * Categories and channels for a business workspace server
  */
-export interface RoleDefinition {
-  /** Role name */
-  name: string;
-  /** Role color in hex format (e.g., "#FF5733") */
-  color: string;
-  /** Whether the role is displayed separately in the member list */
-  hoist: boolean;
-  /** Whether the role is mentionable by anyone */
-  mentionable: boolean;
-  /** Permission bitfield for the role */
-  permissions: bigint;
-  /** Description of the role's purpose */
-  description?: string;
-}
-
-/**
- * Channel definition within a category
- */
-export interface ChannelDefinition {
-  /** Channel name */
-  name: string;
-  /** Channel type */
-  type: ChannelType;
-  /** Channel topic/description */
-  topic?: string;
-  /** Whether the channel is NSFW */
-  nsfw?: boolean;
-  /** Slowmode delay in seconds (0-21600) */
-  slowmode?: number;
-  /** Role names that can access this channel (empty means everyone) */
-  allowedRoles?: string[];
-  /** Role names that cannot access this channel */
-  deniedRoles?: string[];
-}
-
-/**
- * Category definition containing multiple channels
- */
-export interface CategoryDefinition {
-  /** Category name */
-  name: string;
-  /** Channels within this category */
-  channels: ChannelDefinition[];
-  /** Role names that can access this category (empty means everyone) */
-  allowedRoles?: string[];
-  /** Role names that cannot access this category */
-  deniedRoles?: string[];
-}
-
-/**
- * Server settings configuration
- */
-export interface ServerSettings {
-  /** Verification level: 0=None, 1=Low, 2=Medium, 3=High, 4=Highest */
-  verificationLevel: 0 | 1 | 2 | 3 | 4;
-  /** Explicit content filter: 0=Disabled, 1=Members without roles, 2=All members */
-  contentFilter: 0 | 1 | 2;
-  /** Default notification setting: 'all' or 'mentions' */
-  defaultNotifications: 'all' | 'mentions';
-}
-
-/**
- * Complete server template definition
- */
-export interface ServerTemplate {
-  /** Template identifier */
-  id: string;
-  /** Template display name */
-  name: string;
-  /** Template description */
-  description: string;
-  /** Template icon (emoji or custom) */
-  icon: string;
-  /** Server roles (in order of hierarchy, highest first) */
-  roles: RoleDefinition[];
-  /** Server categories with channels */
-  categories: CategoryDefinition[];
-  /** Server settings */
-  settings: ServerSettings;
-}
+const businessCategories: TemplateCategory[] = [
+  {
+    name: 'ANNOUNCEMENTS',
+    permissionOverrides: [
+      {
+        role: '@everyone',
+        allow: [DiscordPermission.ViewChannels, DiscordPermission.ReadMessageHistory],
+        deny: [DiscordPermission.SendMessages],
+      },
+      {
+        role: 'Guest',
+        allow: [],
+        deny: [DiscordPermission.ViewChannels],
+      },
+    ],
+    channels: [
+      {
+        name: 'company-news',
+        type: ChannelType.Announcement,
+        topic: 'Official company announcements and updates',
+        permissionOverrides: [
+          {
+            role: '@everyone',
+            allow: [DiscordPermission.ViewChannels, DiscordPermission.ReadMessageHistory],
+            deny: [DiscordPermission.SendMessages],
+          },
+          {
+            role: 'Executive',
+            allow: [DiscordPermission.SendMessages],
+            deny: [],
+          },
+        ],
+      },
+      {
+        name: 'hr-updates',
+        type: ChannelType.Announcement,
+        topic: 'HR policies, benefits, and important notices',
+        permissionOverrides: [
+          {
+            role: '@everyone',
+            allow: [DiscordPermission.ViewChannels, DiscordPermission.ReadMessageHistory],
+            deny: [DiscordPermission.SendMessages],
+          },
+          {
+            role: 'Executive',
+            allow: [DiscordPermission.SendMessages],
+            deny: [],
+          },
+          {
+            role: 'Manager',
+            allow: [DiscordPermission.SendMessages],
+            deny: [],
+          },
+        ],
+      },
+      {
+        name: 'it-notices',
+        type: ChannelType.Text,
+        topic: 'IT system updates, maintenance windows, and tech announcements',
+        permissionOverrides: [
+          {
+            role: '@everyone',
+            allow: [DiscordPermission.ViewChannels, DiscordPermission.ReadMessageHistory],
+            deny: [DiscordPermission.SendMessages],
+          },
+          {
+            role: 'Manager',
+            allow: [DiscordPermission.SendMessages],
+            deny: [],
+          },
+          {
+            role: 'Team Lead',
+            allow: [DiscordPermission.SendMessages],
+            deny: [],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'GENERAL',
+    channels: [
+      {
+        name: 'lobby',
+        type: ChannelType.Text,
+        topic: 'General discussion and company-wide conversations',
+      },
+      {
+        name: 'introductions',
+        type: ChannelType.Text,
+        topic: 'Introduce yourself to the team!',
+        slowmode: 60,
+      },
+      {
+        name: 'watercooler',
+        type: ChannelType.Text,
+        topic: 'Casual chat, memes, and non-work conversations',
+      },
+      {
+        name: 'kudos',
+        type: ChannelType.Text,
+        topic: 'Recognize and appreciate your colleagues',
+      },
+    ],
+  },
+  {
+    name: 'DEPARTMENTS',
+    permissionOverrides: [
+      {
+        role: 'Guest',
+        allow: [],
+        deny: [DiscordPermission.ViewChannels],
+      },
+      {
+        role: 'Contractor',
+        allow: [],
+        deny: [DiscordPermission.ViewChannels],
+      },
+    ],
+    channels: [
+      {
+        name: 'engineering',
+        type: ChannelType.Text,
+        topic: 'Engineering team discussions and updates',
+      },
+      {
+        name: 'design',
+        type: ChannelType.Text,
+        topic: 'Design team discussions and creative work',
+      },
+      {
+        name: 'marketing',
+        type: ChannelType.Text,
+        topic: 'Marketing campaigns and strategy',
+      },
+      {
+        name: 'sales',
+        type: ChannelType.Text,
+        topic: 'Sales team coordination and deal discussions',
+      },
+      {
+        name: 'operations',
+        type: ChannelType.Text,
+        topic: 'Operations and logistics coordination',
+      },
+      {
+        name: 'hr-team',
+        type: ChannelType.Text,
+        topic: 'HR team internal discussions',
+        permissionOverrides: [
+          {
+            role: '@everyone',
+            allow: [],
+            deny: [DiscordPermission.ViewChannels],
+          },
+          {
+            role: 'Executive',
+            allow: [DiscordPermission.ViewChannels],
+            deny: [],
+          },
+          {
+            role: 'Manager',
+            allow: [DiscordPermission.ViewChannels],
+            deny: [],
+          },
+        ],
+      },
+      {
+        name: 'finance',
+        type: ChannelType.Text,
+        topic: 'Finance team discussions',
+        permissionOverrides: [
+          {
+            role: '@everyone',
+            allow: [],
+            deny: [DiscordPermission.ViewChannels],
+          },
+          {
+            role: 'Executive',
+            allow: [DiscordPermission.ViewChannels],
+            deny: [],
+          },
+          {
+            role: 'Manager',
+            allow: [DiscordPermission.ViewChannels],
+            deny: [],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'PROJECTS',
+    permissionOverrides: [
+      {
+        role: 'Guest',
+        allow: [],
+        deny: [DiscordPermission.ViewChannels],
+      },
+    ],
+    channels: [
+      {
+        name: 'project-alpha',
+        type: ChannelType.Text,
+        topic: 'Project Alpha coordination and updates',
+      },
+      {
+        name: 'project-beta',
+        type: ChannelType.Text,
+        topic: 'Project Beta coordination and updates',
+      },
+      {
+        name: 'project-archive',
+        type: ChannelType.Text,
+        topic: 'Archived project discussions and learnings',
+      },
+      {
+        name: 'project-ideas',
+        type: ChannelType.Forum,
+        topic: 'Submit and discuss new project ideas',
+      },
+    ],
+  },
+  {
+    name: 'RESOURCES',
+    channels: [
+      {
+        name: 'documentation',
+        type: ChannelType.Text,
+        topic: 'Important documents, guides, and resources',
+        permissionOverrides: [
+          {
+            role: '@everyone',
+            allow: [DiscordPermission.ViewChannels, DiscordPermission.ReadMessageHistory],
+            deny: [DiscordPermission.SendMessages],
+          },
+          {
+            role: 'Manager',
+            allow: [DiscordPermission.SendMessages],
+            deny: [],
+          },
+          {
+            role: 'Team Lead',
+            allow: [DiscordPermission.SendMessages],
+            deny: [],
+          },
+        ],
+      },
+      {
+        name: 'onboarding',
+        type: ChannelType.Text,
+        topic: 'New employee onboarding materials and FAQs',
+      },
+      {
+        name: 'tools-and-apps',
+        type: ChannelType.Text,
+        topic: 'Company tools, software, and access information',
+      },
+      {
+        name: 'policies',
+        type: ChannelType.Text,
+        topic: 'Company policies and procedures',
+        permissionOverrides: [
+          {
+            role: '@everyone',
+            allow: [DiscordPermission.ViewChannels, DiscordPermission.ReadMessageHistory],
+            deny: [DiscordPermission.SendMessages],
+          },
+          {
+            role: 'Executive',
+            allow: [DiscordPermission.SendMessages],
+            deny: [],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'SUPPORT',
+    channels: [
+      {
+        name: 'it-helpdesk',
+        type: ChannelType.Text,
+        topic: 'IT support requests and troubleshooting',
+      },
+      {
+        name: 'hr-questions',
+        type: ChannelType.Text,
+        topic: 'HR questions and support',
+      },
+      {
+        name: 'facilities',
+        type: ChannelType.Text,
+        topic: 'Office facilities and building-related requests',
+      },
+    ],
+  },
+  {
+    name: 'LEADERSHIP',
+    permissionOverrides: [
+      {
+        role: '@everyone',
+        allow: [],
+        deny: [DiscordPermission.ViewChannels],
+      },
+      {
+        role: 'Executive',
+        allow: [DiscordPermission.ViewChannels],
+        deny: [],
+      },
+    ],
+    channels: [
+      {
+        name: 'exec-discussion',
+        type: ChannelType.Text,
+        topic: 'Executive team private discussions',
+      },
+      {
+        name: 'strategic-planning',
+        type: ChannelType.Text,
+        topic: 'Long-term strategy and planning',
+      },
+      {
+        name: 'sensitive-matters',
+        type: ChannelType.Text,
+        topic: 'Confidential discussions',
+      },
+      {
+        name: 'Executive Boardroom',
+        type: ChannelType.Voice,
+      },
+    ],
+  },
+  {
+    name: 'MEETINGS',
+    channels: [
+      {
+        name: 'All Hands',
+        type: ChannelType.Voice,
+      },
+      {
+        name: 'Conference Room A',
+        type: ChannelType.Voice,
+      },
+      {
+        name: 'Conference Room B',
+        type: ChannelType.Voice,
+      },
+      {
+        name: 'Quick Sync',
+        type: ChannelType.Voice,
+      },
+      {
+        name: 'Interview Room',
+        type: ChannelType.Voice,
+        permissionOverrides: [
+          {
+            role: '@everyone',
+            allow: [],
+            deny: [DiscordPermission.ViewChannels],
+          },
+          {
+            role: 'Executive',
+            allow: [DiscordPermission.ViewChannels, DiscordPermission.Connect],
+            deny: [],
+          },
+          {
+            role: 'Manager',
+            allow: [DiscordPermission.ViewChannels, DiscordPermission.Connect],
+            deny: [],
+          },
+          {
+            role: 'Team Lead',
+            allow: [DiscordPermission.ViewChannels, DiscordPermission.Connect],
+            deny: [],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'SOCIAL',
+    channels: [
+      {
+        name: 'events',
+        type: ChannelType.Text,
+        topic: 'Company events, parties, and social gatherings',
+      },
+      {
+        name: 'birthdays',
+        type: ChannelType.Text,
+        topic: 'Celebrate team member birthdays!',
+      },
+      {
+        name: 'hobbies',
+        type: ChannelType.Text,
+        topic: 'Share your hobbies and interests',
+      },
+      {
+        name: 'pets',
+        type: ChannelType.Text,
+        topic: 'Show off your furry (or not so furry) friends',
+      },
+      {
+        name: 'game-night',
+        type: ChannelType.Text,
+        topic: 'Coordinate game nights and fun activities',
+      },
+      {
+        name: 'Social Lounge',
+        type: ChannelType.Voice,
+      },
+    ],
+  },
+];
 
 /**
  * Business workspace server template
- * Designed for professional teams with structured communication and project management
  */
 export const businessTemplate: ServerTemplate = {
   id: 'business',
   name: 'Business Workspace',
-  description: 'Professional workspace for teams with departments, projects, and structured communication channels',
-  icon: '💼',
-
-  roles: [
-    {
-      name: 'Owner',
-      color: '#E74C3C',
-      hoist: true,
-      mentionable: false,
-      permissions: DiscordPermissions.ADMINISTRATOR,
-      description: 'Server owner with full administrative access',
-    },
-    {
-      name: 'Executive',
-      color: '#9B59B6',
-      hoist: true,
-      mentionable: true,
-      permissions:
-        DiscordPermissions.VIEW_CHANNEL |
-        DiscordPermissions.SEND_MESSAGES |
-        DiscordPermissions.EMBED_LINKS |
-        DiscordPermissions.ATTACH_FILES |
-        DiscordPermissions.READ_MESSAGE_HISTORY |
-        DiscordPermissions.MENTION_EVERYONE |
-        DiscordPermissions.USE_EXTERNAL_EMOJIS |
-        DiscordPermissions.ADD_REACTIONS |
-        DiscordPermissions.CONNECT |
-        DiscordPermissions.SPEAK |
-        DiscordPermissions.STREAM |
-        DiscordPermissions.MANAGE_CHANNELS |
-        DiscordPermissions.MANAGE_MESSAGES |
-        DiscordPermissions.MUTE_MEMBERS |
-        DiscordPermissions.MOVE_MEMBERS |
-        DiscordPermissions.KICK_MEMBERS,
-      description: 'Executive leadership with elevated permissions',
-    },
-    {
-      name: 'Manager',
-      color: '#3498DB',
-      hoist: true,
-      mentionable: true,
-      permissions:
-        DiscordPermissions.VIEW_CHANNEL |
-        DiscordPermissions.SEND_MESSAGES |
-        DiscordPermissions.EMBED_LINKS |
-        DiscordPermissions.ATTACH_FILES |
-        DiscordPermissions.READ_MESSAGE_HISTORY |
-        DiscordPermissions.MENTION_EVERYONE |
-        DiscordPermissions.USE_EXTERNAL_EMOJIS |
-        DiscordPermissions.ADD_REACTIONS |
-        DiscordPermissions.CONNECT |
-        DiscordPermissions.SPEAK |
-        DiscordPermissions.STREAM |
-        DiscordPermissions.MANAGE_MESSAGES |
-        DiscordPermissions.MUTE_MEMBERS,
-      description: 'Department managers with moderation capabilities',
-    },
-    {
-      name: 'Team Lead',
-      color: '#2ECC71',
-      hoist: true,
-      mentionable: true,
-      permissions:
-        DiscordPermissions.VIEW_CHANNEL |
-        DiscordPermissions.SEND_MESSAGES |
-        DiscordPermissions.EMBED_LINKS |
-        DiscordPermissions.ATTACH_FILES |
-        DiscordPermissions.READ_MESSAGE_HISTORY |
-        DiscordPermissions.USE_EXTERNAL_EMOJIS |
-        DiscordPermissions.ADD_REACTIONS |
-        DiscordPermissions.CONNECT |
-        DiscordPermissions.SPEAK |
-        DiscordPermissions.STREAM |
-        DiscordPermissions.MANAGE_MESSAGES,
-      description: 'Team leads with limited moderation',
-    },
-    {
-      name: 'Employee',
-      color: '#1ABC9C',
-      hoist: false,
-      mentionable: false,
-      permissions:
-        DiscordPermissions.VIEW_CHANNEL |
-        DiscordPermissions.SEND_MESSAGES |
-        DiscordPermissions.EMBED_LINKS |
-        DiscordPermissions.ATTACH_FILES |
-        DiscordPermissions.READ_MESSAGE_HISTORY |
-        DiscordPermissions.USE_EXTERNAL_EMOJIS |
-        DiscordPermissions.ADD_REACTIONS |
-        DiscordPermissions.CONNECT |
-        DiscordPermissions.SPEAK |
-        DiscordPermissions.STREAM,
-      description: 'Standard employee access',
-    },
-    {
-      name: 'Contractor',
-      color: '#F39C12',
-      hoist: false,
-      mentionable: false,
-      permissions:
-        DiscordPermissions.VIEW_CHANNEL |
-        DiscordPermissions.SEND_MESSAGES |
-        DiscordPermissions.EMBED_LINKS |
-        DiscordPermissions.ATTACH_FILES |
-        DiscordPermissions.READ_MESSAGE_HISTORY |
-        DiscordPermissions.ADD_REACTIONS |
-        DiscordPermissions.CONNECT |
-        DiscordPermissions.SPEAK,
-      description: 'External contractors with limited access',
-    },
-    {
-      name: 'Guest',
-      color: '#95A5A6',
-      hoist: false,
-      mentionable: false,
-      permissions:
-        DiscordPermissions.VIEW_CHANNEL |
-        DiscordPermissions.SEND_MESSAGES |
-        DiscordPermissions.READ_MESSAGE_HISTORY |
-        DiscordPermissions.ADD_REACTIONS |
-        DiscordPermissions.CONNECT |
-        DiscordPermissions.SPEAK,
-      description: 'Guests with minimal access',
-    },
-  ],
-
-  categories: [
-    {
-      name: '📢 ANNOUNCEMENTS',
-      channels: [
-        {
-          name: 'company-news',
-          type: 'announcement',
-          topic: 'Official company announcements and updates',
-          allowedRoles: ['Executive', 'Manager'],
-        },
-        {
-          name: 'hr-updates',
-          type: 'announcement',
-          topic: 'HR policies, benefits, and important notices',
-          allowedRoles: ['Executive', 'Manager'],
-        },
-        {
-          name: 'it-notices',
-          type: 'text',
-          topic: 'IT system updates, maintenance windows, and tech announcements',
-          allowedRoles: ['Manager', 'Team Lead'],
-        },
-      ],
-      deniedRoles: ['Guest'],
-    },
-    {
-      name: '💬 GENERAL',
-      channels: [
-        {
-          name: 'lobby',
-          type: 'text',
-          topic: 'General discussion and company-wide conversations',
-        },
-        {
-          name: 'introductions',
-          type: 'text',
-          topic: 'Introduce yourself to the team!',
-        },
-        {
-          name: 'watercooler',
-          type: 'text',
-          topic: 'Casual chat, memes, and non-work conversations',
-        },
-        {
-          name: 'kudos',
-          type: 'text',
-          topic: 'Recognize and appreciate your colleagues',
-        },
-      ],
-    },
-    {
-      name: '🏢 DEPARTMENTS',
-      channels: [
-        {
-          name: 'engineering',
-          type: 'text',
-          topic: 'Engineering team discussions and updates',
-        },
-        {
-          name: 'design',
-          type: 'text',
-          topic: 'Design team discussions and creative work',
-        },
-        {
-          name: 'marketing',
-          type: 'text',
-          topic: 'Marketing campaigns and strategy',
-        },
-        {
-          name: 'sales',
-          type: 'text',
-          topic: 'Sales team coordination and deal discussions',
-        },
-        {
-          name: 'operations',
-          type: 'text',
-          topic: 'Operations and logistics coordination',
-        },
-        {
-          name: 'hr-team',
-          type: 'text',
-          topic: 'HR team internal discussions',
-          allowedRoles: ['Executive', 'Manager'],
-        },
-        {
-          name: 'finance',
-          type: 'text',
-          topic: 'Finance team discussions',
-          allowedRoles: ['Executive', 'Manager'],
-        },
-      ],
-      deniedRoles: ['Guest', 'Contractor'],
-    },
-    {
-      name: '📋 PROJECTS',
-      channels: [
-        {
-          name: 'project-alpha',
-          type: 'text',
-          topic: 'Project Alpha coordination and updates',
-        },
-        {
-          name: 'project-beta',
-          type: 'text',
-          topic: 'Project Beta coordination and updates',
-        },
-        {
-          name: 'project-archive',
-          type: 'text',
-          topic: 'Archived project discussions and learnings',
-        },
-        {
-          name: 'project-ideas',
-          type: 'forum',
-          topic: 'Submit and discuss new project ideas',
-        },
-      ],
-      deniedRoles: ['Guest'],
-    },
-    {
-      name: '📚 RESOURCES',
-      channels: [
-        {
-          name: 'documentation',
-          type: 'text',
-          topic: 'Important documents, guides, and resources',
-        },
-        {
-          name: 'onboarding',
-          type: 'text',
-          topic: 'New employee onboarding materials and FAQs',
-        },
-        {
-          name: 'tools-and-apps',
-          type: 'text',
-          topic: 'Company tools, software, and access information',
-        },
-        {
-          name: 'policies',
-          type: 'text',
-          topic: 'Company policies and procedures',
-        },
-      ],
-    },
-    {
-      name: '🆘 SUPPORT',
-      channels: [
-        {
-          name: 'it-helpdesk',
-          type: 'text',
-          topic: 'IT support requests and troubleshooting',
-        },
-        {
-          name: 'hr-questions',
-          type: 'text',
-          topic: 'HR questions and support',
-        },
-        {
-          name: 'facilities',
-          type: 'text',
-          topic: 'Office facilities and building-related requests',
-        },
-      ],
-    },
-    {
-      name: '🔒 LEADERSHIP',
-      channels: [
-        {
-          name: 'exec-discussion',
-          type: 'text',
-          topic: 'Executive team private discussions',
-        },
-        {
-          name: 'strategic-planning',
-          type: 'text',
-          topic: 'Long-term strategy and planning',
-        },
-        {
-          name: 'sensitive-matters',
-          type: 'text',
-          topic: 'Confidential discussions',
-        },
-      ],
-      allowedRoles: ['Owner', 'Executive'],
-    },
-    {
-      name: '🎤 MEETINGS',
-      channels: [
-        {
-          name: 'All Hands',
-          type: 'voice',
-          topic: 'Company-wide meetings and town halls',
-        },
-        {
-          name: 'Conference Room A',
-          type: 'voice',
-          topic: 'General purpose meeting room',
-        },
-        {
-          name: 'Conference Room B',
-          type: 'voice',
-          topic: 'General purpose meeting room',
-        },
-        {
-          name: 'Quick Sync',
-          type: 'voice',
-          topic: 'Quick informal sync calls',
-        },
-        {
-          name: 'Interview Room',
-          type: 'voice',
-          topic: 'Candidate interviews',
-          allowedRoles: ['Executive', 'Manager', 'Team Lead'],
-        },
-        {
-          name: 'Executive Boardroom',
-          type: 'voice',
-          topic: 'Executive meetings',
-          allowedRoles: ['Owner', 'Executive'],
-        },
-      ],
-    },
-    {
-      name: '🎉 SOCIAL',
-      channels: [
-        {
-          name: 'events',
-          type: 'text',
-          topic: 'Company events, parties, and social gatherings',
-        },
-        {
-          name: 'birthdays',
-          type: 'text',
-          topic: 'Celebrate team member birthdays!',
-        },
-        {
-          name: 'hobbies',
-          type: 'text',
-          topic: 'Share your hobbies and interests',
-        },
-        {
-          name: 'pets',
-          type: 'text',
-          topic: 'Show off your furry (or not so furry) friends',
-        },
-        {
-          name: 'game-night',
-          type: 'text',
-          topic: 'Coordinate game nights and fun activities',
-        },
-        {
-          name: 'Social Lounge',
-          type: 'voice',
-          topic: 'Casual voice chat for social time',
-        },
-      ],
-    },
-  ],
-
-  settings: {
-    verificationLevel: 2, // Medium - must have verified email
-    contentFilter: 1, // Scan media from members without roles
-    defaultNotifications: 'mentions', // Only mentions to avoid notification overload
-  },
+  description: 'Professional workspace for teams with departments, projects, and structured communication channels.',
+  useCase: 'Companies, startups, remote teams, and professional organizations',
+  roles: businessRoles,
+  categories: businessCategories,
+  systemChannel: 'lobby',
+  afkChannel: 'Social Lounge',
+  afkTimeout: 600,
 };
-
-/**
- * Get the business template
- */
-export function getBusinessTemplate(): ServerTemplate {
-  return businessTemplate;
-}
-
-/**
- * Get a preview of the business template structure
- */
-export function getBusinessTemplatePreview(): {
-  name: string;
-  description: string;
-  icon: string;
-  roleCount: number;
-  categoryCount: number;
-  channelCount: number;
-  roles: string[];
-  categories: string[];
-} {
-  const channelCount = businessTemplate.categories.reduce(
-    (total, category) => total + category.channels.length,
-    0
-  );
-
-  return {
-    name: businessTemplate.name,
-    description: businessTemplate.description,
-    icon: businessTemplate.icon,
-    roleCount: businessTemplate.roles.length,
-    categoryCount: businessTemplate.categories.length,
-    channelCount,
-    roles: businessTemplate.roles.map((r) => r.name),
-    categories: businessTemplate.categories.map((c) => c.name),
-  };
-}
 
 export default businessTemplate;

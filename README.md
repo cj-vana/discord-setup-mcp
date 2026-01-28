@@ -1,19 +1,20 @@
 # Discord Server Setup MCP
 
-An MCP (Model Context Protocol) server for automating Discord server setup using the Discord Bot API. This server enables AI assistants like Claude to create servers, channels, roles, configure settings, and apply templates through a Discord bot.
+An MCP (Model Context Protocol) server for automating Discord server setup using the Discord Bot API. This server enables AI assistants like Claude to manage servers, channels, roles, permissions, and apply templates through a Discord bot.
 
-## ✨ Features
+## Features
 
-- **Cross-Platform**: Works on Windows, Linux, and macOS (no platform restrictions)
+- **Cross-Platform**: Works on Windows, Linux, and macOS
 - **No Discord App Required**: Operates via Discord Bot API (headless)
 - **Guild Management**: Discover, select, and manage multiple Discord servers
-- **Channel Management**: Create, edit, and delete channels and categories
+- **Channel Management**: Create, edit, and delete channels and categories with permission overwrites
 - **Role Management**: Create, edit, delete, and reorder roles with full permission control
+- **Permission Overwrites**: Make channels/categories private, grant specific role access
 - **Server Settings**: Configure verification levels, content filters, and notification settings
 - **Pre-built Templates**: Apply ready-to-use server templates for common use cases
-- **Fast & Reliable**: Direct API calls (100x faster than UI automation)
+- **Fast & Reliable**: Direct API calls with proper error handling
 
-## 📋 Pre-built Templates
+## Pre-built Templates
 
 | Template | Description | Roles | Categories | Channels |
 |----------|-------------|-------|------------|----------|
@@ -22,7 +23,7 @@ An MCP (Model Context Protocol) server for automating Discord server setup using
 | **Business** | Professional workspace for teams and organizations | 6 | 6 | 18+ |
 | **Study Group** | Academic collaboration space for study groups and classes | 5 | 5 | 15+ |
 
-## 🔧 Prerequisites
+## Prerequisites
 
 ### System Requirements
 
@@ -31,13 +32,9 @@ An MCP (Model Context Protocol) server for automating Discord server setup using
 
 ### Discord Bot Setup
 
-You need to create a Discord bot to use this MCP server. Follow our [Bot Setup Guide](docs/BOT_SETUP.md) for detailed instructions.
-
-**Quick Summary:**
-
 1. Create an application at https://discord.com/developers/applications
 2. Add a bot user and copy the bot token
-3. Enable "SERVER MEMBERS INTENT" in bot settings
+3. Enable **SERVER MEMBERS INTENT** in bot settings (Bot → Privileged Gateway Intents)
 4. Generate an OAuth2 invite URL with required permissions:
    - Manage Server
    - Manage Roles
@@ -45,13 +42,15 @@ You need to create a Discord bot to use this MCP server. Follow our [Bot Setup G
    - View Channels
 5. Invite the bot to your Discord server(s)
 
-## 📦 Installation
+See [docs/BOT_SETUP.md](docs/BOT_SETUP.md) for detailed instructions.
+
+## Installation
 
 ### From Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/discord-setup-mcp.git
+git clone https://github.com/cj-vana/discord-setup-mcp.git
 cd discord-setup-mcp
 
 # Install dependencies
@@ -61,11 +60,9 @@ npm install
 npm run build
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 ### Set Bot Token
-
-You have two options to configure your Discord bot token:
 
 #### Option A: Environment Variable (Recommended)
 
@@ -86,7 +83,7 @@ Create `~/.discord-mcp/config.json`:
 
 ### Claude Desktop Configuration
 
-Add this to your Claude Desktop configuration file:
+Add to your Claude Desktop config:
 
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -105,141 +102,378 @@ Add this to your Claude Desktop configuration file:
 }
 ```
 
-## 🚀 Usage
+### Claude Code Configuration
+
+```bash
+claude mcp add discord-setup-mcp node /path/to/discord-setup-mcp/dist/index.js
+```
+
+Set the token in your environment or use the config file method.
+
+## Usage
 
 ### Basic Workflow
 
-1. **List servers** the bot has access to:
-   ```
-   List Discord servers
-   ```
+1. **List servers** the bot has access to
+2. **Select a server** to work with
+3. **Create channels, roles, or apply templates**
 
-2. **Select a server** to work with:
-   ```
-   Select the server named "My Server"
-   ```
-
-3. **Create channels, roles, or apply templates**:
-   ```
-   Create a text channel called "general-chat"
-   Create a role called "Moderator" with MANAGE_MESSAGES permission
-   Apply the gaming template to this server
-   ```
-
-### Available Tools
-
-#### Guild Management
-- `list_guilds` - List all servers the bot can access
-- `select_guild` - Set the active server for operations
-- `get_guild_info` - Get detailed server information
-
-#### Channel Management
-- `create_category` - Create a channel category
-- `create_channel` - Create a channel (text, voice, announcement, stage, forum)
-- `edit_channel` - Modify channel settings
-- `delete_channel` - Delete a channel
-
-#### Role Management
-- `create_role` - Create a role with permissions
-- `edit_role` - Modify role settings
-- `delete_role` - Delete a role
-- `reorder_roles` - Reorder role hierarchy
-
-#### Server Settings
-- `update_server_settings` - Update multiple server settings
-- `set_verification_level` - Set member verification level
-- `set_content_filter` - Set explicit content filter
-- `set_default_notifications` - Set default notification setting
-
-#### Templates
-- `list_templates` - List available templates
-- `preview_template` - View template details
-- `apply_template` - Apply a template to a server
-
-## 📖 Examples
-
-### Create a Complete Server Setup
+### Example Commands
 
 ```
-Apply the gaming template to my server
+List Discord servers
+Select the server named "My Server"
+Create a text channel called "general-chat"
+Create a role called "Moderator" with MANAGE_MESSAGES permission
+Make the "admin-chat" category private, only visible to the Admin role
+Apply the gaming template to this server
 ```
 
-### Manage Channels
+## Tool Reference
+
+### Guild Management
+
+#### `list_guilds`
+List all servers the bot can access.
+
+#### `select_guild`
+Set the active server for subsequent operations.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `guildId` | string | Yes | Guild ID or name to select |
+
+#### `get_guild_info`
+Get detailed server information including channels, roles, and settings.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `guildId` | string | No | Guild ID or name (uses current if not specified) |
+
+### Channel Management
+
+#### `create_category`
+Create a channel category with optional permission overwrites.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Category name (1-100 characters) |
+| `guildId` | string | No | Guild ID or name |
+| `position` | number | No | Position in channel list |
+| `permissionOverwrites` | array | No | Permission overwrites for roles/users |
+
+#### `create_channel`
+Create a channel (text, voice, announcement, stage, forum).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Channel name (1-100 characters) |
+| `type` | string | No | Channel type: `text`, `voice`, `announcement`, `stage`, `forum` (default: `text`) |
+| `guildId` | string | No | Guild ID or name |
+| `categoryId` | string | No | Parent category ID |
+| `topic` | string | No | Channel topic (text channels, max 1024 chars) |
+| `nsfw` | boolean | No | Age-restricted channel (default: false) |
+| `slowmode` | number | No | Slowmode in seconds (0-21600) |
+| `bitrate` | number | No | Voice channel bitrate (8000-384000) |
+| `userLimit` | number | No | Voice channel user limit (0-99, 0=unlimited) |
+| `position` | number | No | Position in channel list |
+| `permissionOverwrites` | array | No | Permission overwrites for roles/users |
+
+#### `edit_channel`
+Modify an existing channel's settings and permissions.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `channelId` | string | Yes | Channel ID to edit |
+| `guildId` | string | No | Guild ID or name |
+| `name` | string | No | New channel name |
+| `topic` | string | No | New channel topic |
+| `nsfw` | boolean | No | Age-restricted setting |
+| `slowmode` | number | No | Slowmode in seconds |
+| `bitrate` | number | No | Voice channel bitrate |
+| `userLimit` | number | No | Voice channel user limit |
+| `position` | number | No | New position |
+| `categoryId` | string | No | Move to category (null to remove) |
+| `permissionOverwrites` | array | No | Replace permission overwrites |
+
+#### `delete_channel`
+Delete a channel (cannot be undone).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `channelId` | string | Yes | Channel ID to delete |
+| `guildId` | string | No | Guild ID or name |
+
+### Role Management
+
+#### `create_role`
+Create a role with permissions.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Role name (1-100 characters) |
+| `guildId` | string | No | Guild ID or name |
+| `color` | string/number | No | Hex color (`#FF0000`) or integer |
+| `hoist` | boolean | No | Display separately in member list |
+| `mentionable` | boolean | No | Allow anyone to mention this role |
+| `permissions` | array | No | Array of permission names |
+| `position` | number | No | Position in role hierarchy |
+
+#### `edit_role`
+Modify an existing role.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `roleId` | string | Yes | Role ID to edit |
+| `guildId` | string | No | Guild ID or name |
+| `name` | string | No | New role name |
+| `color` | string/number | No | New color |
+| `hoist` | boolean | No | Display separately setting |
+| `mentionable` | boolean | No | Mentionable setting |
+| `permissions` | array | No | Replace all permissions |
+| `position` | number | No | New position in hierarchy |
+
+#### `delete_role`
+Delete a role (cannot be undone).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `roleId` | string | Yes | Role ID to delete |
+| `guildId` | string | No | Guild ID or name |
+
+#### `reorder_roles`
+Reorder roles in the hierarchy.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `rolePositions` | array | Yes | Array of `{roleId, position}` objects |
+| `guildId` | string | No | Guild ID or name |
+
+### Server Settings
+
+#### `update_server_settings`
+Update multiple server settings at once.
+
+#### `set_verification_level`
+Set member verification level (0-4).
+
+#### `set_content_filter`
+Set explicit content filter level.
+
+#### `set_default_notifications`
+Set default notification setting for new members.
+
+### Templates
+
+#### `list_templates`
+List available pre-built templates.
+
+#### `preview_template`
+View template details before applying.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `templateId` | string | Yes | Template ID to preview |
+
+#### `apply_template`
+Apply a template to a server.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `templateId` | string | Yes | Template ID to apply |
+| `guildId` | string | No | Guild ID or name |
+
+## Permission Overwrites
+
+Permission overwrites allow you to customize access to channels and categories. Use them to:
+- Make channels private (deny `@everyone` VIEW_CHANNEL)
+- Grant specific roles access
+- Restrict certain actions for specific users/roles
+
+### Permission Overwrite Format
+
+```json
+{
+  "id": "role-or-user-id",
+  "type": "role",
+  "allow": ["VIEW_CHANNEL", "SEND_MESSAGES"],
+  "deny": ["MANAGE_MESSAGES"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Role ID or User ID |
+| `type` | string | `role` or `member` |
+| `allow` | array | Permissions to explicitly allow |
+| `deny` | array | Permissions to explicitly deny |
+
+### Example: Make a Category Private
+
+```json
+{
+  "channelId": "category-id",
+  "permissionOverwrites": [
+    {
+      "id": "everyone-role-id",
+      "type": "role",
+      "deny": ["VIEW_CHANNEL"]
+    },
+    {
+      "id": "admin-role-id",
+      "type": "role",
+      "allow": ["VIEW_CHANNEL", "SEND_MESSAGES", "MANAGE_MESSAGES"]
+    }
+  ]
+}
+```
+
+## Available Permissions
+
+Use these permission names in role permissions and permission overwrites:
+
+### General Permissions
+| Permission | Description |
+|------------|-------------|
+| `ADMINISTRATOR` | Full server access (bypasses all permissions) |
+| `VIEW_CHANNEL` | View channels and read messages |
+| `MANAGE_CHANNELS` | Create, edit, delete channels |
+| `MANAGE_ROLES` | Create, edit, delete roles below bot's role |
+| `MANAGE_GUILD` | Change server settings |
+| `VIEW_AUDIT_LOG` | View server audit log |
+| `VIEW_GUILD_INSIGHTS` | View server insights |
+| `MANAGE_WEBHOOKS` | Create, edit, delete webhooks |
+| `MANAGE_GUILD_EXPRESSIONS` | Manage emojis and stickers |
+| `CREATE_INSTANT_INVITE` | Create invite links |
+| `CHANGE_NICKNAME` | Change own nickname |
+| `MANAGE_NICKNAMES` | Change other members' nicknames |
+| `KICK_MEMBERS` | Kick members from server |
+| `BAN_MEMBERS` | Ban members from server |
+| `MODERATE_MEMBERS` | Timeout members |
+| `MANAGE_EVENTS` | Create and manage events |
+
+### Text Channel Permissions
+| Permission | Description |
+|------------|-------------|
+| `SEND_MESSAGES` | Send messages in text channels |
+| `SEND_TTS_MESSAGES` | Send text-to-speech messages |
+| `MANAGE_MESSAGES` | Delete messages, pin messages |
+| `EMBED_LINKS` | Embed links in messages |
+| `ATTACH_FILES` | Upload files |
+| `READ_MESSAGE_HISTORY` | Read past messages |
+| `MENTION_EVERYONE` | Use @everyone and @here |
+| `USE_EXTERNAL_EMOJIS` | Use emojis from other servers |
+| `USE_EXTERNAL_STICKERS` | Use stickers from other servers |
+| `ADD_REACTIONS` | Add reactions to messages |
+| `MANAGE_THREADS` | Manage and delete threads |
+| `CREATE_PUBLIC_THREADS` | Create public threads |
+| `CREATE_PRIVATE_THREADS` | Create private threads |
+| `SEND_MESSAGES_IN_THREADS` | Send messages in threads |
+| `USE_APPLICATION_COMMANDS` | Use slash commands |
+
+### Voice Channel Permissions
+| Permission | Description |
+|------------|-------------|
+| `CONNECT` | Connect to voice channels |
+| `SPEAK` | Speak in voice channels |
+| `STREAM` | Screen share and video |
+| `USE_VAD` | Use voice activity detection |
+| `PRIORITY_SPEAKER` | Be heard over others |
+| `MUTE_MEMBERS` | Mute other members |
+| `DEAFEN_MEMBERS` | Deafen other members |
+| `MOVE_MEMBERS` | Move members between channels |
+| `REQUEST_TO_SPEAK` | Request to speak in stage channels |
+| `USE_EMBEDDED_ACTIVITIES` | Use activities |
+| `USE_SOUNDBOARD` | Use soundboard |
+| `USE_EXTERNAL_SOUNDS` | Use external sounds |
+| `SEND_VOICE_MESSAGES` | Send voice messages |
+
+## Examples
+
+### Create a Complete Team Server Structure
 
 ```
-Create a voice channel called "General Voice" in the "Voice Channels" category
-Edit the "announcements" channel to set the topic to "Server updates and news"
-Delete the "old-channel" channel
+1. Select my Discord server
+2. Create these roles with permissions:
+   - "Admin" with ADMINISTRATOR
+   - "Moderator" with MANAGE_MESSAGES, KICK_MEMBERS, MUTE_MEMBERS
+   - "Member" with VIEW_CHANNEL, SEND_MESSAGES, CONNECT, SPEAK
+
+3. Create these categories, all private to @everyone but visible to Member role:
+   - "General" with channels: welcome, rules, announcements
+   - "Discussion" with channels: general-chat, off-topic, help
+   - "Voice" with voice channels: General Voice, Gaming, AFK
+
+4. Make the "Admin" category only visible to Admin role
 ```
 
-### Manage Roles
+### Set Up Private Channels
 
 ```
-Create a role called "VIP" with color #FFD700 that is hoisted and mentionable
-Edit the "Moderator" role to add KICK_MEMBERS permission
-Reorder roles to put "Admin" above "Moderator"
+Make the "staff-chat" channel private:
+- Deny VIEW_CHANNEL to @everyone
+- Allow VIEW_CHANNEL, SEND_MESSAGES, MANAGE_MESSAGES to Moderator role
+- Allow VIEW_CHANNEL, SEND_MESSAGES, ADMINISTRATOR to Admin role
 ```
 
-### Configure Server Settings
+### Configure Role Hierarchy
 
 ```
-Set the verification level to high
-Set the content filter to scan all members
-Set default notifications to only mentions
+Reorder roles so Admin is highest, then Moderator, then Member, then @everyone
 ```
 
-## 🔒 Security
-
-- **Never share your bot token** - it's like a password
-- **Use environment variables** in production - don't commit tokens to git
-- **Regenerate tokens if compromised** - reset immediately in Discord Developer Portal
-- **Use restrictive file permissions** - `chmod 600 ~/.discord-mcp/config.json`
-- **Limit bot permissions** - only grant what's actually needed
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Bot Not Connecting
+- Verify bot token is correct
+- Check that SERVER MEMBERS INTENT is enabled in Discord Developer Portal
+- Ensure the bot user is created (not just the application)
 
-- Verify your bot token is correct
-- Check that required intents are enabled (SERVER MEMBERS INTENT)
-- Ensure the bot user is created in Discord Developer Portal
+### Can't Manage Roles/Channels
+- Bot's role must be higher than roles it manages
+- Check bot has required permissions in server settings
+- Verify the bot was invited with correct OAuth2 scopes
 
-### Bot Can't Create Channels/Roles
-
-- Check bot has required permissions in Discord server settings
-- Verify bot's role is positioned above roles it needs to manage
-- Ensure bot has "Manage Channels", "Manage Roles", and "Manage Server" permissions
+### Permission Errors
+- Bot can only manage roles below its highest role
+- Some permissions require the bot to have them first
+- Channel overwrites may conflict with category permissions
 
 ### Guild Not Found
+- Confirm bot is in the server
+- Try using guild ID instead of name
+- Enable Discord Developer Mode to copy IDs (User Settings → Advanced)
 
-- Confirm bot is in the server (check member list)
-- Try using guild ID instead of name (more reliable)
-- Enable Developer Mode in Discord to copy guild IDs
+### Debug Logging
+Debug logs are written to `/tmp/discord-mcp-debug.log` for troubleshooting permission and API issues.
 
-## 🏗️ Architecture
+## Security
 
-This MCP server uses the discord.js library to interact with the Discord Bot API:
+- **Never share your bot token** - treat it like a password
+- **Use environment variables** - don't commit tokens to version control
+- **Regenerate tokens if compromised** - reset in Discord Developer Portal
+- **Limit bot permissions** - only grant what's actually needed
+- **Restrict file permissions** - `chmod 600 ~/.discord-mcp/config.json`
 
-- **Client Management**: Singleton Discord client with automatic reconnection
-- **Guild Context**: Multi-server support with smart guild resolution
-- **Error Handling**: Comprehensive error mapping from Discord API codes
-- **Rate Limiting**: Built-in throttling to respect Discord rate limits
-- **Template System**: Orchestrated role and channel creation
+## Architecture
 
-## 📚 Documentation
+- **Runtime**: Node.js 18+
+- **Language**: TypeScript
+- **Discord API**: discord.js v14
+- **MCP SDK**: @modelcontextprotocol/sdk
+- **Validation**: Zod
 
-- [Bot Setup Guide](docs/BOT_SETUP.md) - Detailed instructions for creating a Discord bot
-- [CLAUDE.md](CLAUDE.md) - Development guide and architecture documentation
+See [CLAUDE.md](CLAUDE.md) for development documentation.
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## 📄 License
+## License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Built with [discord.js](https://discord.js.org/)
 - Powered by [Model Context Protocol](https://modelcontextprotocol.io/)
