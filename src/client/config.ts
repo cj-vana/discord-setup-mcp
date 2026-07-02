@@ -17,15 +17,6 @@ export const ConfigSchema = z.object({
     .string()
     .optional()
     .describe('Default guild ID to use when not specified in tool calls'),
-
-  rateLimit: z
-    .object({
-      maxRetries: z.number().int().positive().default(3),
-      retryDelay: z.number().int().positive().default(1000),
-    })
-    .optional()
-    .default({ maxRetries: 3, retryDelay: 1000 })
-    .describe('Rate limit retry configuration'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -54,14 +45,6 @@ export function getConfig(): Config {
       const config = ConfigSchema.parse({
         discordToken: envToken,
         defaultGuildId: process.env.DISCORD_DEFAULT_GUILD_ID,
-        rateLimit: {
-          maxRetries: process.env.DISCORD_RATE_LIMIT_MAX_RETRIES
-            ? parseInt(process.env.DISCORD_RATE_LIMIT_MAX_RETRIES, 10)
-            : 3,
-          retryDelay: process.env.DISCORD_RATE_LIMIT_RETRY_DELAY
-            ? parseInt(process.env.DISCORD_RATE_LIMIT_RETRY_DELAY, 10)
-            : 1000,
-        },
       });
       cachedConfig = config;
       return config;

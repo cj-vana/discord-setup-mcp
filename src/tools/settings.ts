@@ -33,48 +33,15 @@ export const updateServerSettingsToolDefinition = {
   name: 'update_server_settings',
   description:
     'Updates multiple server settings at once. Can modify name, description, verification level, content filter, and default notifications.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      guildId: {
-        type: 'string',
-        description:
-          'Guild ID or name. If not provided, uses the currently selected guild.',
-      },
-      name: {
-        type: 'string',
-        description: 'New server name (2-100 characters)',
-      },
-      description: {
-        type: 'string',
-        description: 'New server description (max 120 characters)',
-      },
-      verificationLevel: {
-        type: 'string',
-        enum: ['none', 'low', 'medium', 'high', 'very_high'],
-        description: 'Verification level for new members',
-      },
-      explicitContentFilter: {
-        type: 'string',
-        enum: ['disabled', 'members_without_roles', 'all_members'],
-        description: 'Explicit content filter setting',
-      },
-      defaultMessageNotifications: {
-        type: 'string',
-        enum: ['all_messages', 'only_mentions'],
-        description: 'Default notification setting for new members',
-      },
-    },
-  },
 };
 
 export const UpdateServerSettingsInputSchema = z.object({
-  guildId: z.string().optional(),
-  name: z.string().min(2).max(100).optional(),
-  description: z.string().max(120).optional(),
-  verificationLevel: VerificationLevelSchema.optional(),
-  explicitContentFilter: ExplicitContentFilterSchema.optional(),
-  defaultMessageNotifications: DefaultNotificationsSchema.optional(),
+  guildId: z.string().optional().describe('Guild ID or name. Defaults to the currently selected guild.'),
+  name: z.string().min(2).max(100).optional().describe('New server name (2-100 characters)'),
+  description: z.string().max(300).optional().describe('New server description (community servers, max 300 characters)'),
+  verificationLevel: VerificationLevelSchema.optional().describe('Verification level for new members'),
+  explicitContentFilter: ExplicitContentFilterSchema.optional().describe('Explicit content filter setting'),
+  defaultMessageNotifications: DefaultNotificationsSchema.optional().describe('Default notification setting for new members'),
 });
 
 export type UpdateServerSettingsInput = z.infer<typeof UpdateServerSettingsInputSchema>;
@@ -125,6 +92,13 @@ export async function updateServerSettingsHandler(
       editOptions.defaultMessageNotifications = notificationsMap[input.defaultMessageNotifications];
     }
 
+    if (Object.keys(editOptions).length === 0) {
+      return {
+        success: false,
+        error: 'No settings provided to update. Supply at least one of: name, description, verificationLevel, explicitContentFilter, defaultMessageNotifications.',
+      };
+    }
+
     const updatedGuild = await guild.edit(editOptions);
 
     return {
@@ -156,28 +130,13 @@ export const setVerificationLevelToolDefinition = {
   name: 'set_verification_level',
   description:
     'Sets the verification level required for new members to interact with the server.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      guildId: {
-        type: 'string',
-        description:
-          'Guild ID or name. If not provided, uses the currently selected guild.',
-      },
-      level: {
-        type: 'string',
-        enum: ['none', 'low', 'medium', 'high', 'very_high'],
-        description:
-          'Verification level: none (unrestricted), low (verified email), medium (registered for 5+ min), high (member for 10+ min), very_high (verified phone)',
-      },
-    },
-    required: ['level'],
-  },
 };
 
 export const SetVerificationLevelInputSchema = z.object({
-  guildId: z.string().optional(),
-  level: VerificationLevelSchema,
+  guildId: z.string().optional().describe('Guild ID or name. Defaults to the currently selected guild.'),
+  level: VerificationLevelSchema.describe(
+    'Verification level: none (unrestricted), low (verified email), medium (registered 5+ min), high (member 10+ min), very_high (verified phone)'
+  ),
 });
 
 export type SetVerificationLevelInput = z.infer<typeof SetVerificationLevelInputSchema>;
@@ -223,30 +182,14 @@ export async function setVerificationLevelHandler(
 
 export const setContentFilterToolDefinition = {
   name: 'set_content_filter',
-  description:
-    'Sets the explicit content filter level for the server.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      guildId: {
-        type: 'string',
-        description:
-          'Guild ID or name. If not provided, uses the currently selected guild.',
-      },
-      level: {
-        type: 'string',
-        enum: ['disabled', 'members_without_roles', 'all_members'],
-        description:
-          'Content filter level: disabled (no scanning), members_without_roles (scan messages from members without roles), all_members (scan all messages)',
-      },
-    },
-    required: ['level'],
-  },
+  description: 'Sets the explicit content filter level for the server.',
 };
 
 export const SetContentFilterInputSchema = z.object({
-  guildId: z.string().optional(),
-  level: ExplicitContentFilterSchema,
+  guildId: z.string().optional().describe('Guild ID or name. Defaults to the currently selected guild.'),
+  level: ExplicitContentFilterSchema.describe(
+    'Content filter level: disabled (no scanning), members_without_roles (scan messages from members without roles), all_members (scan all messages)'
+  ),
 });
 
 export type SetContentFilterInput = z.infer<typeof SetContentFilterInputSchema>;
@@ -292,28 +235,13 @@ export const setDefaultNotificationsToolDefinition = {
   name: 'set_default_notifications',
   description:
     'Sets the default notification setting for new members joining the server.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      guildId: {
-        type: 'string',
-        description:
-          'Guild ID or name. If not provided, uses the currently selected guild.',
-      },
-      setting: {
-        type: 'string',
-        enum: ['all_messages', 'only_mentions'],
-        description:
-          'Notification setting: all_messages (notify for all messages), only_mentions (notify only when mentioned)',
-      },
-    },
-    required: ['setting'],
-  },
 };
 
 export const SetDefaultNotificationsInputSchema = z.object({
-  guildId: z.string().optional(),
-  setting: DefaultNotificationsSchema,
+  guildId: z.string().optional().describe('Guild ID or name. Defaults to the currently selected guild.'),
+  setting: DefaultNotificationsSchema.describe(
+    'Notification setting: all_messages (notify for all messages), only_mentions (notify only when mentioned)'
+  ),
 });
 
 export type SetDefaultNotificationsInput = z.infer<typeof SetDefaultNotificationsInputSchema>;

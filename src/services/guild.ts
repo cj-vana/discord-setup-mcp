@@ -5,7 +5,7 @@
 
 import { Client, Guild } from 'discord.js';
 import { getConfig } from '../client/config.js';
-import { GuildNotFoundError, GuildNotSelectedError } from '../utils/errors.js';
+import { GuildNotFoundError, GuildNotSelectedError, ValidationError } from '../utils/errors.js';
 
 /**
  * Current guild context
@@ -73,11 +73,20 @@ export async function resolveGuild(
   // Try lookup by ID first (most common and fastest)
   let guild = client.guilds.cache.get(targetId);
 
-  // If not found by ID, try by name (case-insensitive)
+  // If not found by ID, try by name (case-insensitive). If more than one
+  // server shares the name, refuse to guess — report the candidates so the
+  // caller can disambiguate by ID instead of silently targeting the wrong one.
   if (!guild) {
-    guild = client.guilds.cache.find(
+    const nameMatches = client.guilds.cache.filter(
       (g) => g.name.toLowerCase() === targetId.toLowerCase()
     );
+    if (nameMatches.size > 1) {
+      const candidates = nameMatches.map((g) => `${g.name} (${g.id})`).join(', ');
+      throw new ValidationError(
+        `Multiple servers match the name '${targetId}': ${candidates}. Specify the guild ID instead.`
+      );
+    }
+    guild = nameMatches.first();
   }
 
   // If still not found, try fetching from API (in case cache is stale)
@@ -143,6 +152,7 @@ export async function getGuildInfo(guild: Guild): Promise<{
   explicitContentFilter: number;
   defaultMessageNotifications: number;
   features: string[];
+  botHighestRolePosition: number;
   roles: Array<{
     id: string;
     name: string;
@@ -158,6 +168,28 @@ export async function getGuildInfo(guild: Guild): Promise<{
     position: number | undefined;
   }>;
 }> {
+  // Roles sorted highest-to-lowest so hierarchy reads correctly (top = most
+  // powerful), matching Discord's UI. @everyone is position 0 at the bottom.
+  const roles = [...guild.roles.cache.values()]
+    .sort((a, b) => b.position - a.position)
+    .map((role) => ({
+      id: role.id,
+      name: role.name,
+      color: role.color,
+      position: role.position,
+      permissions: role.permissions.bitfield.toString(),
+    }));
+
+  const channels = [...guild.channels.cache.values()]
+    .map((channel) => ({
+      id: channel.id,
+      name: channel.name,
+      type: channel.type,
+      parentId: channel.parentId,
+      position: 'position' in channel ? channel.position : undefined,
+    }))
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
   return {
     id: guild.id,
     name: guild.name,
@@ -169,19 +201,8 @@ export async function getGuildInfo(guild: Guild): Promise<{
     explicitContentFilter: guild.explicitContentFilter,
     defaultMessageNotifications: guild.defaultMessageNotifications,
     features: guild.features,
-    roles: guild.roles.cache.map((role) => ({
-      id: role.id,
-      name: role.name,
-      color: role.color,
-      position: role.position,
-      permissions: role.permissions.bitfield.toString(),
-    })),
-    channels: guild.channels.cache.map((channel) => ({
-      id: channel.id,
-      name: channel.name,
-      type: channel.type,
-      parentId: channel.parentId,
-      position: 'position' in channel ? channel.position : undefined,
-    })),
+    botHighestRolePosition: guild.members.me?.roles.highest.position ?? 0,
+    roles,
+    channels,
   };
 }

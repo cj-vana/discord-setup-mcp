@@ -169,8 +169,16 @@ const templateRegistry: Map<string, UnifiedTemplate> = new Map([
   ['gaming', normalizeGamingTemplate()],
   ['community', normalizeCommunityTemplate()],
   ['business', normalizeBusinessTemplate()],
-  ['study_group', normalizeStudyGroupTemplate()],
+  ['study-group', normalizeStudyGroupTemplate()],
 ]);
+
+/**
+ * Canonicalize a template id so callers can use hyphen or underscore
+ * interchangeably (e.g. "study_group" and "study-group" both resolve).
+ */
+function normalizeId(id: string): string {
+  return id.trim().toLowerCase().replace(/_/g, '-');
+}
 
 /**
  * Get all available template IDs
@@ -183,14 +191,14 @@ export function getTemplateIds(): string[] {
  * Get a template by ID
  */
 export function getTemplate(id: string): UnifiedTemplate | undefined {
-  return templateRegistry.get(id);
+  return templateRegistry.get(normalizeId(id));
 }
 
 /**
  * Check if a template exists
  */
 export function hasTemplate(id: string): boolean {
-  return templateRegistry.has(id);
+  return templateRegistry.has(normalizeId(id));
 }
 
 /**
@@ -211,7 +219,7 @@ export function listTemplates(): TemplateSummary[] {
  * Get a detailed preview of a template
  */
 export function getTemplatePreview(id: string): TemplatePreview | undefined {
-  const template = templateRegistry.get(id);
+  const template = templateRegistry.get(normalizeId(id));
   if (!template) {
     return undefined;
   }
@@ -264,7 +272,7 @@ export function getTemplatePreview(id: string): TemplatePreview | undefined {
  * Get the raw template data for applying
  */
 export function getRawTemplate(id: string): unknown | undefined {
-  const template = templateRegistry.get(id);
+  const template = templateRegistry.get(normalizeId(id));
   return template?.rawTemplate;
 }
 

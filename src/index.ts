@@ -44,14 +44,17 @@ import {
   createRoleToolDefinition,
   editRoleToolDefinition,
   deleteRoleToolDefinition,
+  listRolesToolDefinition,
   reorderRolesToolDefinition,
   createRoleHandler,
   editRoleHandler,
   deleteRoleHandler,
+  listRolesHandler,
   reorderRolesHandler,
   CreateRoleInputSchema,
   EditRoleInputSchema,
   DeleteRoleInputSchema,
+  ListRolesInputSchema,
   ReorderRolesInputSchema,
 } from './tools/roles.js';
 
@@ -86,7 +89,7 @@ import {
 
 // Server metadata
 const SERVER_NAME = 'discord-setup-mcp';
-const SERVER_VERSION = '2.0.0'; // Major version bump for discord.js rewrite
+const SERVER_VERSION = '2.1.0';
 
 /**
  * Create and configure the MCP server with all tools registered
@@ -109,9 +112,15 @@ It can discover servers, create/manage channels, create/manage roles, configure 
 Available tool categories:
 - Guild: List servers, select active server, get server info
 - Channels: Create/edit/delete channels and categories
-- Roles: Create/edit/delete/reorder roles
+- Roles: Create/edit/delete/list/reorder roles
 - Settings: Configure server verification, content filter, notifications
 - Templates: Apply pre-built server templates (gaming, community, business, study-group)
+
+Role hierarchy note: Discord positions are inverted — a HIGHER position number is
+higher/more powerful, @everyone is position 0 at the bottom, and newly created
+roles default to the bottom. Use list_roles to see the current order, create_role
+with placement:"top"/"above"/"below" to rank a role, and reorder_roles with a
+top-first orderedRoleIds list rather than hand-computing position numbers.
 
 Prerequisites:
 - Discord bot created at https://discord.com/developers/applications
@@ -209,6 +218,13 @@ Workflow:
   );
   registerAsyncTool(
     server,
+    'list_roles',
+    listRolesToolDefinition,
+    ListRolesInputSchema,
+    listRolesHandler
+  );
+  registerAsyncTool(
+    server,
     'reorder_roles',
     reorderRolesToolDefinition,
     ReorderRolesInputSchema,
@@ -277,7 +293,7 @@ Workflow:
 function registerSyncTool<T extends z.ZodObject<any>>(
   server: McpServer,
   name: string,
-  definition: { name: string; description: string; inputSchema: unknown },
+  definition: { name: string; description: string },
   schema: T,
   handler: (input: z.infer<T>) => {
     success: boolean;
@@ -345,7 +361,7 @@ function registerSyncTool<T extends z.ZodObject<any>>(
 function registerAsyncTool<T extends z.ZodObject<any>>(
   server: McpServer,
   name: string,
-  definition: { name: string; description: string; inputSchema: unknown },
+  definition: { name: string; description: string },
   schema: T,
   handler: (input: z.infer<T>) => Promise<{
     success: boolean;

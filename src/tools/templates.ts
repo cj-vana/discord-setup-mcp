@@ -14,7 +14,10 @@ import {
   hasTemplate,
 } from '../templates/index.js';
 import { wrapDiscordError, TemplateError } from '../utils/errors.js';
+import { info } from '../utils/logger.js';
 import type { ServerTemplate } from '../templates/types.js';
+
+const TEMPLATE_IDS = 'gaming, community, business, study-group';
 
 // ============================================================================
 // LIST TEMPLATES
@@ -22,12 +25,7 @@ import type { ServerTemplate } from '../templates/types.js';
 
 export const listTemplatesToolDefinition = {
   name: 'list_templates',
-  description:
-    'Lists all available Discord server templates with their basic information.',
-  inputSchema: {
-    type: 'object',
-    properties: {},
-  },
+  description: 'Lists all available Discord server templates with their basic information.',
 };
 
 export const ListTemplatesInputSchema = z.object({});
@@ -39,7 +37,6 @@ export function listTemplatesHandler(
 ): { success: boolean; data?: unknown; error?: string } {
   try {
     const templates = listTemplates();
-
     return {
       success: true,
       data: {
@@ -49,12 +46,8 @@ export function listTemplatesHandler(
       },
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Failed to list templates';
-    return {
-      success: false,
-      error: errorMessage,
-    };
+    const errorMessage = error instanceof Error ? error.message : 'Failed to list templates';
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -66,24 +59,13 @@ export const previewTemplateToolDefinition = {
   name: 'preview_template',
   description:
     'Shows detailed information about a specific template including all roles, categories, and channels.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      templateId: {
-        type: 'string',
-        description:
-          'Template ID (gaming, community, business, study_group)',
-      },
-    },
-    required: ['templateId'],
-  },
 };
 
 export const PreviewTemplateInputSchema = z.object({
   templateId: z
     .string()
     .min(1, 'Template ID is required')
-    .describe('Template ID to preview'),
+    .describe(`Template ID to preview (${TEMPLATE_IDS})`),
 });
 
 export type PreviewTemplateInput = z.infer<typeof PreviewTemplateInputSchema>;
@@ -93,38 +75,21 @@ export function previewTemplateHandler(
 ): { success: boolean; data?: unknown; error?: string } {
   try {
     if (!hasTemplate(input.templateId)) {
-      throw new TemplateError(
-        input.templateId,
-        `Template '${input.templateId}' not found`
-      );
+      throw new TemplateError(input.templateId, `Template '${input.templateId}' not found`);
     }
 
     const preview = getTemplatePreview(input.templateId);
-
     if (!preview) {
-      throw new TemplateError(
-        input.templateId,
-        `Failed to load template '${input.templateId}'`
-      );
+      throw new TemplateError(input.templateId, `Failed to load template '${input.templateId}'`);
     }
 
-    return {
-      success: true,
-      data: preview,
-    };
+    return { success: true, data: preview };
   } catch (error) {
     if (error instanceof TemplateError) {
-      return {
-        success: false,
-        error: JSON.stringify(error.toJSON()),
-      };
+      return { success: false, error: JSON.stringify(error.toJSON()) };
     }
-    const errorMessage =
-      error instanceof Error ? error.message : 'Failed to preview template';
-    return {
-      success: false,
-      error: errorMessage,
-    };
+    const errorMessage = error instanceof Error ? error.message : 'Failed to preview template';
+    return { success: false, error: errorMessage };
   }
 }
 
@@ -135,43 +100,15 @@ export function previewTemplateHandler(
 export const applyTemplateToolDefinition = {
   name: 'apply_template',
   description:
-    'Applies a template to a Discord server, creating all roles, categories, and channels defined in the template. This is a comprehensive operation that will add many elements to the server.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      guildId: {
-        type: 'string',
-        description:
-          'Guild ID or name. If not provided, uses the currently selected guild.',
-      },
-      templateId: {
-        type: 'string',
-        description:
-          'Template ID to apply (gaming, community, business, study_group)',
-      },
-      skipRoles: {
-        type: 'boolean',
-        description: 'Skip creating roles (default: false)',
-      },
-      skipCategories: {
-        type: 'boolean',
-        description: 'Skip creating categories and channels (default: false)',
-      },
-      validate: {
-        type: 'boolean',
-        description: 'Validate guild before applying (default: true)',
-      },
-    },
-    required: ['templateId'],
-  },
+    'Applies a template to a Discord server, creating all roles, categories, and channels defined in the template. Reports per-item failures and skipped (already-existing) roles; success is false if any element failed to create.',
 };
 
 export const ApplyTemplateInputSchema = z.object({
-  guildId: z.string().optional(),
-  templateId: z.string().min(1, 'Template ID is required'),
-  skipRoles: z.boolean().default(false),
-  skipCategories: z.boolean().default(false),
-  validate: z.boolean().default(true),
+  guildId: z.string().optional().describe('Guild ID or name. Defaults to the currently selected guild.'),
+  templateId: z.string().min(1, 'Template ID is required').describe(`Template ID to apply (${TEMPLATE_IDS})`),
+  skipRoles: z.boolean().default(false).describe('Skip creating roles'),
+  skipCategories: z.boolean().default(false).describe('Skip creating categories and channels'),
+  validate: z.boolean().default(true).describe('Validate the guild before applying'),
 });
 
 export type ApplyTemplateInput = z.infer<typeof ApplyTemplateInputSchema>;
@@ -183,27 +120,17 @@ export async function applyTemplateHandler(
     const client = await getDiscordClient();
     const guild = await resolveGuild(client, input.guildId);
 
-    // Check if template exists
     if (!hasTemplate(input.templateId)) {
-      throw new TemplateError(
-        input.templateId,
-        `Template '${input.templateId}' not found`
-      );
+      throw new TemplateError(input.templateId, `Template '${input.templateId}' not found`);
     }
 
-    // Get raw template
     const rawTemplate = getRawTemplate(input.templateId) as ServerTemplate;
     if (!rawTemplate) {
-      throw new TemplateError(
-        input.templateId,
-        `Failed to load template '${input.templateId}'`
-      );
+      throw new TemplateError(input.templateId, `Failed to load template '${input.templateId}'`);
     }
 
-    // Validate guild if requested
     if (input.validate) {
       const validation = validateGuildForTemplate(guild, rawTemplate);
-
       if (!validation.valid) {
         return {
           success: false,
@@ -215,15 +142,12 @@ export async function applyTemplateHandler(
           }),
         };
       }
-
-      // If there are warnings, include them in the response
       if (validation.warnings.length > 0) {
-        console.error('Validation warnings:', validation.warnings);
+        info('Template validation warnings:', validation.warnings.join('; '));
       }
     }
 
-    // Apply template
-    console.error(`Applying template '${input.templateId}' to guild '${guild.name}'...`);
+    info(`Applying template '${input.templateId}' to guild '${guild.name}'...`);
 
     const result = await applyTemplate(guild, rawTemplate, {
       skipRoles: input.skipRoles,
@@ -231,10 +155,25 @@ export async function applyTemplateHandler(
       throttleDelay: 500,
     });
 
-    console.error('Template application complete!');
+    const hadFailures = result.failures.length > 0;
+    const messageParts = [
+      `Created ${result.rolesCreated} roles, ${result.categoriesCreated} categories, and ${result.channelsCreated} channels.`,
+    ];
+    if (result.rolesSkipped.length > 0) {
+      messageParts.push(`Skipped ${result.rolesSkipped.length} existing role(s): ${result.rolesSkipped.join(', ')}.`);
+    }
+    if (result.settingsApplied.length > 0) {
+      messageParts.push(`Applied settings: ${result.settingsApplied.join(', ')}.`);
+    }
+    if (result.settingsWarnings.length > 0) {
+      messageParts.push(result.settingsWarnings.join(' '));
+    }
+    if (hadFailures) {
+      messageParts.push(`${result.failures.length} element(s) failed.`);
+    }
 
     return {
-      success: true,
+      success: !hadFailures,
       data: {
         templateId: input.templateId,
         guildId: guild.id,
@@ -242,14 +181,15 @@ export async function applyTemplateHandler(
         rolesCreated: result.rolesCreated,
         categoriesCreated: result.categoriesCreated,
         channelsCreated: result.channelsCreated,
-        message: `Template '${input.templateId}' applied successfully to '${guild.name}'. Created ${result.rolesCreated} roles, ${result.categoriesCreated} categories, and ${result.channelsCreated} channels.`,
+        rolesSkipped: result.rolesSkipped,
+        settingsApplied: result.settingsApplied,
+        settingsWarnings: result.settingsWarnings,
+        failures: result.failures,
+        message: `Template '${input.templateId}' applied to '${guild.name}'. ${messageParts.join(' ')}`,
       },
     };
   } catch (error) {
     const mcpError = wrapDiscordError(error, 'apply_template');
-    return {
-      success: false,
-      error: JSON.stringify(mcpError.toJSON()),
-    };
+    return { success: false, error: JSON.stringify(mcpError.toJSON()) };
   }
 }

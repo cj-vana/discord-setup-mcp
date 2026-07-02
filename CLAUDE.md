@@ -32,7 +32,7 @@ src/
 ├── tools/
 │   ├── guild.ts          # list_guilds, select_guild, get_guild_info
 │   ├── channels.ts       # create_category, create_channel, edit_channel, delete_channel
-│   ├── roles.ts          # create_role, edit_role, delete_role, reorder_roles
+│   ├── roles.ts          # create_role, edit_role, delete_role, list_roles, reorder_roles
 │   ├── settings.ts       # Server settings tools
 │   └── templates.ts      # list_templates, preview_template, apply_template
 ├── templates/
@@ -43,7 +43,9 @@ src/
 │   ├── business.ts       # Professional workspace template
 │   └── study-group.ts    # Academic collaboration template
 └── utils/
-    └── errors.ts         # Custom error classes
+    ├── errors.ts         # Custom error classes
+    ├── permissions.ts    # Shared permission-name -> bitfield resolution
+    └── logger.ts         # Opt-in debug logging (DISCORD_MCP_DEBUG)
 ```
 
 ### Core Components
@@ -61,46 +63,44 @@ src/
 
 ### Permission Name Conversion
 
-**Important**: The API uses `SCREAMING_SNAKE_CASE` permission names (e.g., `VIEW_CHANNEL`), but discord.js uses `PascalCase` internally (e.g., `ViewChannel`).
-
-The `snakeToPascal()` helper function converts between formats:
-
-```typescript
-// In both channels.ts and roles.ts
-function snakeToPascal(str: string): string {
-  return str.toLowerCase().split('_').map(word =>
-    word.charAt(0).toUpperCase() + word.slice(1)
-  ).join('');
-}
-
-// Usage when looking up permissions
-const pascalPerm = snakeToPascal('VIEW_CHANNEL'); // 'ViewChannel'
-if (pascalPerm in PermissionFlagsBits) {
-  permissionsBitfield |= PermissionFlagsBits[pascalPerm];
-}
-```
-
-### Role Editing (Direct REST API)
-
-The `edit_role` handler uses direct REST API calls instead of discord.js's `role.edit()` for reliability:
+The API uses `SCREAMING_SNAKE_CASE` permission names (e.g., `VIEW_CHANNEL`), but
+discord.js uses `PascalCase` keys on `PermissionFlagsBits` (e.g., `ViewChannel`).
+Reconstructing case word-by-word mangles acronyms (`SEND_TTS_MESSAGES` →
+`SendTtsMessages`, not the real `SendTTSMessages`), which silently dropped those
+permissions. Instead, `src/utils/permissions.ts` normalizes both sides by
+discarding case and separators entirely, which is acronym-proof:
 
 ```typescript
-const response = await fetch(
-  `https://discord.com/api/v10/guilds/${guild.id}/roles/${roleId}`,
-  {
-    method: 'PATCH',
-    headers: {
-      'Authorization': `Bot ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name: 'Role Name',
-      permissions: permissionsBitfield.toString(), // Must be string!
-      color: 0xFF0000,
-    }),
-  }
-);
+import { resolvePermissions, resolvePermissionsStrict } from '../utils/permissions.js';
+
+// Strict: throws on unknown names — use in user-facing tools
+const bitfield = resolvePermissionsStrict(['VIEW_CHANNEL', 'USE_VAD']);
+
+// Lenient: returns { bitfield, unknown } — use in templates to warn-and-continue
+const { bitfield, unknown } = resolvePermissions(perms);
 ```
+
+All permission handling (roles, channel overwrites, templates) goes through this
+one module — do not reintroduce a local `snakeToPascal`.
+
+### Role REST operations (discord.js REST manager)
+
+`create_role`/`edit_role`/reposition use discord.js's REST manager (`client.rest`)
+with `Routes`, not raw `fetch`. This keeps rate-limit queueing and maps failures to
+`DiscordAPIError` (which `wrapDiscordError` translates):
+
+```typescript
+import { Routes } from 'discord.js';
+
+// create
+const role = await client.rest.post(Routes.guildRoles(guild.id), { body });
+// set position (bulk endpoint) — see setRolePosition() which retries once
+await client.rest.patch(Routes.guildRoles(guild.id), { body: [{ id, position }] });
+```
+
+Discord's create-role endpoint ignores `position` (a new role always lands at
+position 1), so placement is a create-then-reposition. Positions are inverted
+(higher = more powerful, `@everyone` = 0) and clamped below the bot's highest role.
 
 ### Permission Overwrites
 
@@ -125,16 +125,15 @@ interface PermissionOverwrite {
 
 ### Debug Logging
 
-Debug logs are written to `/tmp/discord-mcp-debug.log`:
+Logging lives in `src/utils/logger.ts`. Verbose `debug()` output is off by default
+and gated behind the `DISCORD_MCP_DEBUG` env var (`1`/`true`); `info()`/`warn()`
+always go to stderr (never stdout — that carries the JSON-RPC protocol):
 
 ```typescript
-const LOG_FILE = '/tmp/discord-mcp-debug.log';
-function debugLog(...args: any[]) {
-  const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
-  const line = `[${new Date().toISOString()}] ${msg}\n`;
-  try { appendFileSync(LOG_FILE, line); } catch {}
-  console.error(msg);
-}
+import { debug, info, warn } from '../utils/logger.js';
+
+debug('create_role body', body); // only when DISCORD_MCP_DEBUG is set
+warn('Unknown permission(s):', unknown.join(', '));
 ```
 
 ## Tool Implementation Pattern
@@ -142,21 +141,18 @@ function debugLog(...args: any[]) {
 Each tool module exports:
 
 ```typescript
-// 1. Tool definition (JSON Schema for MCP)
+// 1. Tool definition — name + description only. The advertised parameter schema
+//    comes from the Zod shape's .describe() calls (see registration below);
+//    there is intentionally no hand-written JSON inputSchema.
 export const myToolToolDefinition = {
   name: 'my_tool',
   description: 'What the tool does',
-  inputSchema: {
-    type: 'object',
-    properties: { /* ... */ },
-    required: ['requiredField'],
-  },
 };
 
-// 2. Zod schema for validation
+// 2. Zod schema for validation AND client-facing docs (via .describe()).
 export const MyToolInputSchema = z.object({
-  guildId: z.string().optional(),
-  requiredField: z.string().min(1),
+  guildId: z.string().optional().describe('Guild ID or name. Defaults to the selected guild.'),
+  requiredField: z.string().min(1).describe('What this field is for'),
 });
 
 export type MyToolInput = z.infer<typeof MyToolInputSchema>;
@@ -266,23 +262,25 @@ Application strategy:
 ## Adding New Tools
 
 1. Create or edit file in `src/tools/`
-2. Define Zod schema for input validation
-3. Create tool definition with JSON Schema
-4. Implement async handler function
-5. Register in `src/index.ts`:
+2. Define a Zod schema for input validation, using `.describe()` on each field
+   (that text is what MCP clients see). The schema must be a plain `z.ZodObject`
+   — no top-level `.refine()`/`.transform()`, since registration reads `.shape`.
+   Do cross-field validation inside the handler instead.
+3. Export a `{ name, description }` tool definition (no `inputSchema`).
+4. Implement the async handler.
+5. Register in `src/index.ts` via the `registerAsyncTool` / `registerSyncTool`
+   helpers (they parse with the Zod schema and surface validation errors):
 
 ```typescript
 import { myToolToolDefinition, myToolHandler, MyToolInputSchema } from './tools/myfile.js';
 
 // In createServer():
-server.tool(
-  myToolToolDefinition.name,
-  myToolToolDefinition.description,
-  myToolToolDefinition.inputSchema,
-  async (params) => {
-    const input = MyToolInputSchema.parse(params);
-    return myToolHandler(input);
-  }
+registerAsyncTool(
+  server,
+  'my_tool',
+  myToolToolDefinition,
+  MyToolInputSchema,
+  myToolHandler
 );
 ```
 
@@ -296,9 +294,9 @@ node dist/index.js
 # Use Claude Desktop or Claude Code to test tools
 ```
 
-Debug with log file:
+Enable verbose tracing (to stderr):
 ```bash
-tail -f /tmp/discord-mcp-debug.log
+DISCORD_MCP_DEBUG=1 node dist/index.js
 ```
 
 ## Dependencies
@@ -317,12 +315,19 @@ tail -f /tmp/discord-mcp-debug.log
 
 1. **Bot Token Required**: Must have valid Discord bot token
 2. **Bot Permissions**: Needs Manage Server, Manage Roles, Manage Channels
-3. **Server Members Intent**: Must be enabled in Discord Developer Portal
+3. **Gateway Intents**: Only the default (non-privileged) Guilds intent is used — no privileged intents required
 4. **Role Hierarchy**: Bot can only manage roles below its highest role
 5. **Rate Limits**: Discord has rate limits - template service includes throttling
 
 ## Version History
 
+- **v2.1.0**: Role-hierarchy overhaul + audit fixes. `create_role` placement
+  (top/above/below) and `list_roles`; `reorder_roles` `orderedRoleIds`;
+  acronym-proof shared permission resolution (fixes silently-dropped `USE_VAD`/
+  `SEND_TTS_MESSAGES`); `edit_channel` overwrites merge by target; template
+  failure reporting + settings application; dropped privileged GuildMembers
+  intent; REST via discord.js rate-limit queue; opt-in `DISCORD_MCP_DEBUG`
+  logging; removed dead `validation.ts`/`rateLimit`/`inputSchema`. See CHANGELOG.md.
 - **v2.0.0**: Complete rewrite from AppleScript to Discord Bot API
   - Cross-platform support (was macOS-only)
   - Bot token authentication (was local Discord app)

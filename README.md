@@ -7,8 +7,8 @@ An MCP (Model Context Protocol) server for automating Discord server setup using
 - **Cross-Platform**: Works on Windows, Linux, and macOS
 - **No Discord App Required**: Operates via Discord Bot API (headless)
 - **Guild Management**: Discover, select, and manage multiple Discord servers
-- **Channel Management**: Create, edit, and delete channels and categories with permission overwrites
-- **Role Management**: Create, edit, delete, and reorder roles with full permission control
+- **Channel Management**: Create, edit, and delete channels and categories with permission overwrites (edits merge overwrites by target so you don't accidentally expose a private channel)
+- **Role Management**: Create, edit, delete, list, and reorder roles with semantic hierarchy placement (`top`/`above`/`below`, or a top-first ordered list) so important roles land where you mean
 - **Permission Overwrites**: Make channels/categories private, grant specific role access
 - **Server Settings**: Configure verification levels, content filters, and notification settings
 - **Pre-built Templates**: Apply ready-to-use server templates for common use cases
@@ -34,17 +34,21 @@ An MCP (Model Context Protocol) server for automating Discord server setup using
 
 1. Create an application at https://discord.com/developers/applications
 2. Add a bot user and copy the bot token
-3. Enable **ALL Privileged Gateway Intents** in bot settings (Bot → Privileged Gateway Intents):
-   - Presence Intent
-   - Server Members Intent
-   - Message Content Intent
+3. **Privileged Gateway Intents are NOT required.** The server only uses the
+   default (non-privileged) Guilds intent, so you can leave all Privileged
+   Gateway Intents off. (Requesting privileged intents that aren't enabled would
+   actually make login fail.)
 4. Generate an OAuth2 invite URL:
    - Go to OAuth2 → URL Generator
    - Select scopes: `bot` and `applications.commands`
-   - Select **Administrator** permission (required for full server management)
+   - Select the permissions the bot needs — **Manage Roles**, **Manage Channels**,
+     and **Manage Server** cover the current tools; **Administrator** is the
+     simplest catch-all for full server management.
 5. Invite the bot to your Discord server(s) using the generated URL
 
-**Important**: The bot requires Administrator permission to manage all server settings, roles, channels, and permissions without restrictions.
+**Important**: The bot can only create/move/assign roles *below* its own highest
+role in the hierarchy. Make sure the bot's role sits high enough in Server
+Settings → Roles for the roles you want it to manage.
 
 ## Installation
 
@@ -267,8 +271,14 @@ Delete a channel (cannot be undone).
 
 ### Role Management
 
+> **Discord role positions are inverted.** A *higher* position number is higher
+> in the hierarchy and more powerful; `@everyone` is position `0` at the bottom;
+> and a brand-new role defaults to the bottom. Use `placement` / `orderedRoleIds`
+> below and let the server compute the raw numbers — you rarely need to reason
+> about positions directly. The bot can only place roles *below* its own highest role.
+
 #### `create_role`
-Create a role with permissions.
+Create a role with permissions and optional placement in the hierarchy.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -277,8 +287,10 @@ Create a role with permissions.
 | `color` | string/number | No | Hex color (`#FF0000`) or integer |
 | `hoist` | boolean | No | Display separately in member list |
 | `mentionable` | boolean | No | Allow anyone to mention this role |
-| `permissions` | array | No | Array of permission names |
-| `position` | number | No | Position in role hierarchy |
+| `permissions` | array | No | Permission names (SCREAMING_SNAKE_CASE); unknown names are rejected, not silently dropped |
+| `placement` | string | No | `top` / `bottom` / `above` / `below` — where to rank the role (preferred over `position`) |
+| `referenceRoleId` | string | No | Role to place above/below (required when `placement` is `above`/`below`) |
+| `position` | number | No | Raw Discord position (advanced; overrides `placement`) |
 
 #### `edit_role`
 Modify an existing role.
@@ -302,12 +314,22 @@ Delete a role (cannot be undone).
 | `roleId` | string | Yes | Role ID to delete |
 | `guildId` | string | No | Guild ID or name |
 
-#### `reorder_roles`
-Reorder roles in the hierarchy.
+#### `list_roles`
+List roles sorted highest-to-lowest (as they appear in Discord's UI), with each
+role's position and whether the bot can manage it, plus `botHighestRolePosition`.
+Call this before reordering or placing roles.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `rolePositions` | array | Yes | Array of `{roleId, position}` objects |
+| `guildId` | string | No | Guild ID or name |
+
+#### `reorder_roles`
+Reorder roles in the hierarchy. Provide **exactly one** of the inputs below.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `orderedRoleIds` | array | No | Role IDs from most important (index 0 = top) to least. Positions computed for you. **Preferred.** |
+| `rolePositions` | array | No | Advanced: explicit `{roleId, position}` objects with raw Discord positions |
 | `guildId` | string | No | Guild ID or name |
 
 ### Server Settings
@@ -506,7 +528,9 @@ Reorder roles so Admin is highest, then Moderator, then Member, then @everyone
 - Enable Discord Developer Mode to copy IDs (User Settings → Advanced)
 
 ### Debug Logging
-Debug logs are written to `/tmp/discord-mcp-debug.log` for troubleshooting permission and API issues.
+Verbose per-call tracing is off by default. Set `DISCORD_MCP_DEBUG=1` (or `true`)
+in the server's environment to emit debug output to stderr for troubleshooting
+permission and API issues.
 
 ## Security
 

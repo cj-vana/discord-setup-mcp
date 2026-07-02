@@ -22,10 +22,6 @@ export const listGuildsToolDefinition = {
   name: 'list_guilds',
   description:
     'Lists all Discord servers (guilds) that the bot has access to. Use this to discover available servers before performing operations.',
-  inputSchema: {
-    type: 'object',
-    properties: {},
-  },
 };
 
 export const ListGuildsInputSchema = z.object({});
@@ -69,16 +65,6 @@ export const selectGuildToolDefinition = {
   name: 'select_guild',
   description:
     'Sets the active Discord server (guild) for subsequent operations. All tools will use this server unless a different guildId is explicitly specified.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      guildId: {
-        type: 'string',
-        description: 'Guild ID or name to select as the active server',
-      },
-    },
-    required: ['guildId'],
-  },
 };
 
 export const SelectGuildInputSchema = z.object({
@@ -126,17 +112,7 @@ export async function selectGuildHandler(
 export const getGuildInfoToolDefinition = {
   name: 'get_guild_info',
   description:
-    'Gets detailed information about a Discord server (guild), including channels, roles, and settings. If no guildId is specified, uses the currently selected guild.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      guildId: {
-        type: 'string',
-        description:
-          'Guild ID or name. If not provided, uses the currently selected guild.',
-      },
-    },
-  },
+    'Gets detailed information about a Discord server (guild), including channels, roles (sorted highest-to-lowest with the bot\'s hierarchy ceiling), and settings. If no guildId is specified, uses the currently selected guild.',
 };
 
 export const GetGuildInfoInputSchema = z.object({
